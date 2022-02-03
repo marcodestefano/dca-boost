@@ -10,6 +10,8 @@ BASE_URI = "https://api.crypto.com/v2/"
 SETTINGS_FILE = "settings.json"
 API_KEY = "APIKey"
 API_SECRET = "APISecret"
+MAIN_API_KEY = "MainAPIKey"
+MAIN_API_SECRET = "MainAPISecret"
 MAX_MESSAGE_LENGTH = 4096
 
 def create_pair(crypto, base):
@@ -42,10 +44,12 @@ def params_to_str(obj, level):
             return_str += str(obj[key])
     return return_str
 
-def query(method, params={}):
+def query(method, params={}, apikey = None, apisecret = None):
     credentials = get_json_data(SETTINGS_FILE)
-    apikey = credentials[API_KEY]
-    apisecret = credentials[API_SECRET]
+    if not apikey:
+        apikey = credentials[API_KEY]
+    if not apisecret:
+        apisecret = credentials[API_SECRET]
     req = {
         "id" : 1,
         "method": method,
@@ -66,6 +70,12 @@ def query(method, params={}):
     ).hexdigest()
     
     return requests.post(BASE_URI + method, json=req, headers={'Content-Type':'application/json'})
+
+def query_main(method, params = {}):
+    credentials = get_json_data(SETTINGS_FILE)
+    apikey = credentials[MAIN_API_KEY]
+    apisecret = credentials[MAIN_API_SECRET]
+    return query(method, params,apikey, apisecret)
 
 def public_query(method, params={}):
     paramsList = urllib.parse.urlencode(params)

@@ -1,9 +1,13 @@
 import threading
 import traceback
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-from dcaboostutils import json, time, query, create_pair, get_settings, get_account_summary_text
+from dcaboostutils import json, time, query, query_main, create_pair, get_settings, get_account_summary_text, amount_format
 
 TRADING_ENGINE_ACTIVE = 0
+API_LABEL_KEY = "APILabel"
+
+MASTER_ACCOUNT = "MASTER"
+SUB_ACCOUNT = "SUBACCOUNT"
 
 CRYPTO_CURRENCY_KEY = "CRYPTO_CURRENCY"
 BASE_CURRENCY_KEY = "BASE_CURRENCY"
@@ -62,6 +66,65 @@ def status(update, context):
 
 def unknown(update, context):
     genericHandler(update, context, get_unknown_message)
+
+def get_sub_accounts():
+    json_result = None
+    method = "private/subaccount/get-sub-accounts"
+    params = {
+        }
+    query_result = query_main(method, params)
+    if query_result:
+        json_result = json.loads(query_result.text)
+    return json_result
+
+def get_account_summary(currency = None):
+    method = "private/get-account-summary"
+    params = {}
+    if currency:
+        params["currency"] = currency
+    result = query(method, params)
+    return json.loads(result.text)
+
+def get_available_quantity(currency):
+    summary = get_account_summary(currency)
+    available = 0
+    if summary and summary["result"] and summary["result"]["accounts"]:
+        available = summary["result"]["accounts"][0]["available"]
+    return available
+
+def get_current_subaccount():
+    settings = get_settings()
+    account_label = settings[API_LABEL_KEY]
+    result = None
+    sub_accounts = get_sub_accounts()
+    if sub_accounts and sub_accounts["result"]:
+        for sub_account in sub_accounts["result"]["sub_account_list"]:
+            if sub_account["label"] == account_label:
+                result = sub_account
+                break
+    return result
+
+def get_sub_account_uuid():
+    sub_account_uuid = None
+    sub_account = get_current_subaccount()
+    if sub_account:
+        sub_account_uuid = sub_account["uuid"]
+    return sub_account_uuid
+
+def transfer_amount(from_account, to_account, amount, currency):
+    json_result = None
+    method = "private/subaccount/transfer"
+    params = {
+        "from": from_account,
+        "to": to_account,
+        "sub_account_uuid": get_sub_account_uuid(),
+        "currency": currency,
+        "amount": amount
+        }
+    query_result = query_main(method, params)
+    if query_result:
+        json_result = json.loads(query_result.text)
+    return json_result
 
 def create_buy_order(crypto, base, buy_amount):
     json_result = None
@@ -136,12 +199,17 @@ def execute_trading_engine():
             base = settings[BASE_CURRENCY_KEY]
             buy_amount = settings[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
             frequency = settings[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
+            print("Transfering " + str(buy_amount) + " " + base + " from " + MASTER_ACCOUNT)
+            transfer_amount(MASTER_ACCOUNT,SUB_ACCOUNT, buy_amount, base)
             print("Buying " + str(settings[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]) + " " + base + " of " + crypto)
             order = create_buy_order(crypto, base, buy_amount)
             order_id = get_order_id(order)
             if order_id:
                 order_detail = get_order_detail(order_id)
                 print(order_detail)
+            available_quantity = get_available_quantity(crypto)
+            print("Transfering " + amount_format(available_quantity) + " " + crypto + " from " + settings[API_LABEL_KEY])
+            transfer_amount(SUB_ACCOUNT,MASTER_ACCOUNT, available_quantity, crypto)
             print("Waiting " + str(settings[FREQUENCY_IN_HOUR_KEY]) + " hour(s) before next buy order is placed")
             time.sleep(frequency)
     except Exception:

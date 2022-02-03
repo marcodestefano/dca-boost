@@ -1,6 +1,10 @@
 {
-    "APIKey": "your crypto.com exchange api key",
-    "APISecret": "your crypto.com exchange api secret",
+    "APIKey": "your crypto.com exchange subaccount api key",
+    "APISecret": "your crypto.com exchange subaccount api secret",
+    "APILabel": "your crypto.com subaccount api label",
+
+    "MainAPIKey": "your crypto.com exchange main account api key",
+    "MainAPISecret": "your crypto.com exchange main account api secret",
 
     "TelegramBotToken": "your telegram bot token",
     "Users": ["your telegram username", "another telegram username"],
