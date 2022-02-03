@@ -1,0 +1,12 @@
+{
+    "APIKey": "your crypto.com exchange api key",
+    "APISecret": "your crypto.com exchange api secret",
+
+    "TelegramBotToken": "your telegram bot token",
+    "Users": ["your telegram username", "another telegram username"],
+
+    "BASE_CURRENCY": "USDC",
+    "CRYPTO_CURRENCY": "CRO",
+    "BUY_AMOUNT_IN_BASE_CURRENCY": 1,
+    "FREQUENCY_IN_HOUR": 1
+}
