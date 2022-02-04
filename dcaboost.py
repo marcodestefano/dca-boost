@@ -9,6 +9,8 @@ API_LABEL_KEY = "APILabel"
 MASTER_ACCOUNT = "MASTER"
 SUB_ACCOUNT = "SUBACCOUNT"
 
+DCA_SETTINGS_KEY = "DCA"
+
 CRYPTO_CURRENCY_KEY = "CRYPTO_CURRENCY"
 BASE_CURRENCY_KEY = "BASE_CURRENCY"
 BUY_AMOUNT_IN_BASE_CURRENCY_KEY = "BUY_AMOUNT_IN_BASE_CURRENCY"
@@ -31,7 +33,7 @@ def genericHandler(update, context, function):
         output = function()
         context.bot.send_message(chat_id=update.effective_chat.id, text=output)
     else:
-        print(function.__name__ + " command requested by " + update.effective_user.username)
+        print(time.strftime("%Y-%m-%d %H:%M:%S") + " " + function.__name__ + " command requested by " + update.effective_user.username)
 
 def get_start_message():
     return "Welcome to dcaboost! Use /help to retrieve the command list"
@@ -157,6 +159,24 @@ def get_order_id(order):
         order_id = order["result"]["order_id"]
     return order_id
 
+def get_trades(crypto, base, start_time, end_time = None):
+    method = "private/get-trades"
+    params = {
+        "instrument_name": create_pair(crypto, base),
+        "start_ts": start_time
+    }
+    #If end_time is not provided, let's set it as current time
+    if not end_time:
+        end_time = int(time.time())*1000
+        params["end_ts"] = end_time
+    result = query(method, params)
+    trades = []
+    if result:
+        json_result = json.loads(result.text)
+        if json_result and json_result["result"]:
+            trades = json_result["result"]["trade_list"]
+    return trades
+
 def start_trading_engine():
     result = ""
     global TRADING_ENGINE_ACTIVE
@@ -192,31 +212,54 @@ def get_trading_engine_status_text():
 
 def execute_trading_engine():
     try:
-        global TRADING_ENGINE_ACTIVE
-        while TRADING_ENGINE_ACTIVE:
-            settings = get_settings()
-            crypto = settings[CRYPTO_CURRENCY_KEY]
-            base = settings[BASE_CURRENCY_KEY]
-            buy_amount = settings[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
-            frequency = settings[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
-            print("Transfering " + str(buy_amount) + " " + base + " from " + MASTER_ACCOUNT)
-            transfer_amount(MASTER_ACCOUNT,SUB_ACCOUNT, buy_amount, base)
-            print("Buying " + str(settings[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]) + " " + base + " of " + crypto)
-            order = create_buy_order(crypto, base, buy_amount)
-            order_id = get_order_id(order)
-            if order_id:
-                order_detail = get_order_detail(order_id)
-                print(order_detail)
-            available_quantity = get_available_quantity(crypto)
-            print("Transfering " + amount_format(available_quantity) + " " + crypto + " from " + settings[API_LABEL_KEY])
-            transfer_amount(SUB_ACCOUNT,MASTER_ACCOUNT, available_quantity, crypto)
-            print("Waiting " + str(settings[FREQUENCY_IN_HOUR_KEY]) + " hour(s) before next buy order is placed")
-            time.sleep(frequency)
+        settings = get_settings()
+        dca_settings = settings[DCA_SETTINGS_KEY]
+        if dca_settings:
+            for dca in dca_settings:
+                crypto = dca[CRYPTO_CURRENCY_KEY]
+                base = dca[BASE_CURRENCY_KEY]
+                buy_amount = dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
+                frequency = dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
+                print(time.strftime("%Y-%m-%d %H:%M:%S") + " Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds")
+                dca_thread = threading.Thread(target = execute_dca, args = (settings, crypto, base, buy_amount, frequency), daemon = True)
+                time.sleep(1)
+                dca_thread.start()
     except Exception:
         stop_trading_engine()
-        print("Error in the execution of the engine: " + str(traceback.print_exc()))
+        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Error in the execution of the engine: " + str(traceback.print_exc()))
         start_trading_engine()
     return
+
+def execute_dca(settings, crypto, base, buy_amount, frequency):
+    global TRADING_ENGINE_ACTIVE
+    while TRADING_ENGINE_ACTIVE:
+        wait_from_last_trade(crypto, base, frequency)
+        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + str(buy_amount) + " " + base + " from " + MASTER_ACCOUNT)
+        transfer_amount(MASTER_ACCOUNT,SUB_ACCOUNT, buy_amount, base)
+        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Buying " + str(buy_amount) + " " + base + " of " + crypto)
+        order = create_buy_order(crypto, base, buy_amount)
+        order_id = get_order_id(order)
+        if order_id:
+            order_detail = get_order_detail(order_id)
+            print(order_detail)
+        available_quantity = get_available_quantity(crypto)
+        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + amount_format(available_quantity) + " " + crypto + " from " + settings[API_LABEL_KEY])
+        transfer_amount(SUB_ACCOUNT,MASTER_ACCOUNT, available_quantity, crypto)
+        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Waiting " + str(frequency) + " seconds before next buy order of " + crypto + " is placed")
+        time.sleep(frequency)
+
+def wait_from_last_trade(crypto, base, frequency):
+    expected_last_trade = (int(time.time()) - frequency) * 1000
+    time_until_next_trade = frequency
+    trades = get_trades(crypto, base, expected_last_trade)
+    if trades:
+        most_recent_trade = 0
+        for trade in trades:
+            if most_recent_trade < trade["create_time"]:
+                most_recent_trade = trade["create_time"]
+        time_until_next_trade = int((most_recent_trade + frequency*1000 - int(time.time()*1000))/1000)
+    print(time.strftime("%Y-%m-%d %H:%M:%S") + " Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed")
+    time.sleep(time_until_next_trade)
 
 credentials = get_settings()
 tokenData = credentials[BOT_TOKEN_KEY]
