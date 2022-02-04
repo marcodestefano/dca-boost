@@ -222,7 +222,7 @@ def execute_trading_engine():
                 frequency = dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
                 print(time.strftime("%Y-%m-%d %H:%M:%S") + " Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds")
                 dca_thread = threading.Thread(target = execute_dca, args = (settings, crypto, base, buy_amount, frequency), daemon = True)
-                time.sleep(1)
+                time.sleep(10)
                 dca_thread.start()
     except Exception:
         stop_trading_engine()
