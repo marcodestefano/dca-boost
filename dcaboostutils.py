@@ -45,7 +45,6 @@ def params_to_str(obj, level):
     return return_str
 
 def query(method, params={}, apikey = None, apisecret = None):
-    time.sleep(1)
     credentials = get_json_data(SETTINGS_FILE)
     if not apikey:
         apikey = credentials[API_KEY]
@@ -79,7 +78,6 @@ def query_main(method, params = {}):
     return query(method, params,apikey, apisecret)
 
 def public_query(method, params={}):
-    time.sleep(1)
     paramsList = urllib.parse.urlencode(params)
     return requests.get(BASE_URI + method + "?" + paramsList)
 

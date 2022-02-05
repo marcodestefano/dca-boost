@@ -4,6 +4,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from dcaboostutils import json, time, query, query_main, create_pair, get_settings, get_account_summary_text, amount_format
 
 TRADING_ENGINE_ACTIVE = 0
+LOCK_QUERY_ACTIVE = 0
 API_LABEL_KEY = "APILabel"
 
 MASTER_ACCOUNT = "MASTER"
@@ -169,8 +170,18 @@ def get_trades(crypto, base, start_time, end_time = None):
     if not end_time:
         end_time = int(time.time())*1000
         params["end_ts"] = end_time
-    result = query(method, params)
-    trades = []
+        exit_query = 0
+        while not exit_query:
+            global LOCK_QUERY_ACTIVE
+            if not LOCK_QUERY_ACTIVE:
+                LOCK_QUERY_ACTIVE = 1
+                time.sleep(1)
+                result = query(method, params)
+                LOCK_QUERY_ACTIVE = 0
+                exit_query = 1
+            else:
+                time.sleep(1)
+    trades = None
     if result:
         json_result = json.loads(result.text)
         if json_result and json_result["result"]:
@@ -222,7 +233,7 @@ def execute_trading_engine():
                 frequency = dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
                 print(time.strftime("%Y-%m-%d %H:%M:%S") + " Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds")
                 dca_thread = threading.Thread(target = execute_dca, args = (settings, crypto, base, buy_amount, frequency), daemon = True)
-                time.sleep(10)
+                #time.sleep(10)
                 dca_thread.start()
     except Exception:
         stop_trading_engine()
@@ -245,8 +256,6 @@ def execute_dca(settings, crypto, base, buy_amount, frequency):
         available_quantity = get_available_quantity(crypto)
         print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + amount_format(available_quantity) + " " + crypto + " from " + settings[API_LABEL_KEY])
         transfer_amount(SUB_ACCOUNT,MASTER_ACCOUNT, available_quantity, crypto)
-        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Waiting " + str(frequency) + " seconds before next buy order of " + crypto + " is placed")
-        time.sleep(frequency)
 
 def wait_from_last_trade(crypto, base, frequency):
     expected_last_trade = (int(time.time()) - frequency) * 1000
@@ -258,6 +267,8 @@ def wait_from_last_trade(crypto, base, frequency):
             if most_recent_trade < trade["create_time"]:
                 most_recent_trade = trade["create_time"]
         time_until_next_trade = int((most_recent_trade + frequency*1000 - int(time.time()*1000))/1000)
+    elif trades is not None:
+        time_until_next_trade = 100
     print(time.strftime("%Y-%m-%d %H:%M:%S") + " Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed")
     time.sleep(time_until_next_trade)
 
