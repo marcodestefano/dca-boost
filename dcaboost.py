@@ -253,9 +253,13 @@ def execute_dca(settings, crypto, base, buy_amount, frequency):
         if order_id:
             order_detail = get_order_detail(order_id)
             print(order_detail)
-        available_quantity = get_available_quantity(crypto)
-        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + amount_format(available_quantity) + " " + crypto + " from " + settings[API_LABEL_KEY])
-        transfer_amount(SUB_ACCOUNT,MASTER_ACCOUNT, available_quantity, crypto)
+        transfer_to_master_account(settings, crypto)
+        transfer_to_master_account(settings, base)
+
+def transfer_to_master_account(settings, currency):
+    available_quantity = get_available_quantity(currency)
+    transfer_amount(SUB_ACCOUNT, MASTER_ACCOUNT, available_quantity, currency)
+    print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + amount_format(available_quantity) + " " + currency + " from " + settings[API_LABEL_KEY])
 
 def wait_from_last_trade(crypto, base, frequency):
     expected_last_trade = (int(time.time()) - frequency) * 1000
