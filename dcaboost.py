@@ -233,7 +233,7 @@ def execute_trading_engine():
                 frequency = dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
                 print(time.strftime("%Y-%m-%d %H:%M:%S") + " Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds")
                 dca_thread = threading.Thread(target = execute_dca, args = (settings, crypto, base, buy_amount, frequency), daemon = True)
-                #time.sleep(10)
+                time.sleep(1)
                 dca_thread.start()
     except Exception:
         stop_trading_engine()
@@ -268,7 +268,7 @@ def wait_from_last_trade(crypto, base, frequency):
                 most_recent_trade = trade["create_time"]
         time_until_next_trade = int((most_recent_trade + frequency*1000 - int(time.time()*1000))/1000)
     elif trades is not None:
-        time_until_next_trade = 100
+        time_until_next_trade = 1
     print(time.strftime("%Y-%m-%d %H:%M:%S") + " Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed")
     time.sleep(time_until_next_trade)
 
