@@ -4,7 +4,7 @@ import hashlib
 import time
 import requests
 import urllib
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
 BASE_URI = "https://api.crypto.com/v2/"
 SETTINGS_FILE = "settings.json"
@@ -82,7 +82,10 @@ def public_query(method, params={}):
     return requests.get(BASE_URI + method + "?" + paramsList)
 
 def amount_format(value):
-    return '{0:f}'.format(Decimal(str(value)))
+    return_value = Decimal(str(value))
+    if return_value.as_tuple().exponent < -8:
+        return_value = Decimal(str(value)).quantize(Decimal("0.00000001"), rounding=ROUND_DOWN)
+    return '{0:f}'.format(return_value)
 
 def get_account_summary_text(currency = None):
     result = get_account_summary(currency)
@@ -90,7 +93,8 @@ def get_account_summary_text(currency = None):
     if result and result["result"]:
         accounts = result["result"]["accounts"]
         for account in accounts:
-            if account["balance"] != 0:
+            decimal_amount = amount_format(account["balance"])
+            if Decimal(decimal_amount) > 0:
                 output = output + amount_format(account["balance"]) + " " + account["currency"] + " (" + amount_format(account["available"]) + " available, " + amount_format(account["order"]) + " in order)" +"\n"
     if output == "":
         altText = "active balance"

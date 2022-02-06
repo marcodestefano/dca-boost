@@ -1,7 +1,8 @@
+from decimal import ROUND_DOWN
 import threading
 import traceback
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-from dcaboostutils import json, time, query, query_main, create_pair, get_settings, get_account_summary_text, amount_format
+from dcaboostutils import Decimal, json, time, query, query_main, create_pair, get_settings, get_account_summary_text, amount_format
 
 TRADING_ENGINE_ACTIVE = 0
 LOCK_QUERY_ACTIVE = 0
@@ -93,7 +94,10 @@ def get_available_quantity(currency):
     available = 0
     if summary and summary["result"] and summary["result"]["accounts"]:
         available = summary["result"]["accounts"][0]["available"]
-    return available
+    return_value = Decimal(str(available))
+    if return_value.as_tuple().exponent < -8:
+        return_value = Decimal(str(available)).quantize(Decimal("0.00000001"), rounding=ROUND_DOWN)
+    return return_value
 
 def get_current_subaccount():
     settings = get_settings()
@@ -116,17 +120,18 @@ def get_sub_account_uuid():
 
 def transfer_amount(from_account, to_account, amount, currency):
     json_result = None
-    method = "private/subaccount/transfer"
-    params = {
-        "from": from_account,
-        "to": to_account,
-        "sub_account_uuid": get_sub_account_uuid(),
-        "currency": currency,
-        "amount": amount
-        }
-    query_result = query_main(method, params)
-    if query_result:
-        json_result = json.loads(query_result.text)
+    if amount>0:
+        method = "private/subaccount/transfer"
+        params = {
+            "from": from_account,
+            "to": to_account,
+            "sub_account_uuid": get_sub_account_uuid(),
+            "currency": currency,
+            "amount": str(amount)
+            }
+        query_result = query_main(method, params)
+        if query_result:
+            json_result = json.loads(query_result.text)
     return json_result
 
 def create_buy_order(crypto, base, buy_amount):
@@ -244,6 +249,8 @@ def execute_trading_engine():
 def execute_dca(settings, crypto, base, buy_amount, frequency):
     global TRADING_ENGINE_ACTIVE
     while TRADING_ENGINE_ACTIVE:
+        transfer_to_master_account(settings, crypto)
+        transfer_to_master_account(settings, base)
         wait_from_last_trade(crypto, base, frequency)
         print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + str(buy_amount) + " " + base + " from " + MASTER_ACCOUNT)
         transfer_amount(MASTER_ACCOUNT,SUB_ACCOUNT, buy_amount, base)
@@ -253,13 +260,14 @@ def execute_dca(settings, crypto, base, buy_amount, frequency):
         if order_id:
             order_detail = get_order_detail(order_id)
             print(order_detail)
-        transfer_to_master_account(settings, crypto)
-        transfer_to_master_account(settings, base)
 
 def transfer_to_master_account(settings, currency):
     available_quantity = get_available_quantity(currency)
-    transfer_amount(SUB_ACCOUNT, MASTER_ACCOUNT, available_quantity, currency)
-    print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + amount_format(available_quantity) + " " + currency + " from " + settings[API_LABEL_KEY])
+    if available_quantity > 0:
+        transfer_amount(SUB_ACCOUNT, MASTER_ACCOUNT, available_quantity, currency)
+        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + amount_format(available_quantity) + " " + currency + " from " + settings[API_LABEL_KEY])
+    else:
+        print(time.strftime("%Y-%m-%d %H:%M:%S") + " No " + currency + " available for transfer from " + settings[API_LABEL_KEY])
 
 def wait_from_last_trade(crypto, base, frequency):
     expected_last_trade = (int(time.time()) - frequency) * 1000
