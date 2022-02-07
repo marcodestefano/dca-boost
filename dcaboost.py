@@ -6,6 +6,7 @@ from dcaboostutils import Decimal, json, time, query, query_main, create_pair, g
 
 TRADING_ENGINE_ACTIVE = 0
 LOCK_QUERY_ACTIVE = 0
+NEGATIVE_BALANCE = "NEGATIVE_BALANCE"
 API_LABEL_KEY = "APILabel"
 
 MASTER_ACCOUNT = "MASTER"
@@ -128,7 +129,7 @@ def transfer_amount(from_account, to_account, amount, currency):
             "amount": str(amount)
             }
         query_result = query_main(method, params)
-        if query_result:
+        if query_result is not None:
             json_result = json.loads(query_result.text)
     return json_result
 
@@ -256,14 +257,15 @@ def execute_dca(settings, crypto, base, buy_amount, frequency, bot, chat_id):
         wait_from_last_trade(crypto, base, frequency, bot, chat_id)
         text = "Transfering " + str(buy_amount) + " " + base + " from " + MASTER_ACCOUNT
         bot.send_message(chat_id=chat_id, text=text)
-        transfer_amount(MASTER_ACCOUNT,SUB_ACCOUNT, buy_amount, base)
-        text = "Buying " + str(buy_amount) + " " + base + " of " + crypto
-        bot.send_message(chat_id=chat_id, text=text)
-        order = create_buy_order(crypto, base, buy_amount)
-        order_id = get_order_id(order)
-        if order_id:
-            order_detail = get_order_detail(order_id)
-            print(order_detail)
+        message = transfer_amount(MASTER_ACCOUNT,SUB_ACCOUNT, buy_amount, base)
+        if NEGATIVE_BALANCE in str(message):
+            text = "You have less than " + str(buy_amount) + " " + base + " available to buy " + crypto + ". Trying again in " + str(int(frequency/4)) + " seconds"
+            bot.send_message(chat_id=chat_id, text=text)
+            time.sleep(int(frequency/4))
+        else:
+            text = "Buying " + str(buy_amount) + " " + base + " of " + crypto
+            bot.send_message(chat_id=chat_id, text=text)
+            create_buy_order(crypto, base, buy_amount)
 
 def transfer_to_master_account(settings, currency):
     text = ""
