@@ -32,32 +32,30 @@ def get_users():
 
 def genericHandler(update, context, function):
     if(isAuthorized(update)):
-        output = function()
-        context.bot.send_message(chat_id=update.effective_chat.id, text=output)
+        function(context.bot, update.effective_chat.id)
     else:
         print(time.strftime("%Y-%m-%d %H:%M:%S") + " " + function.__name__ + " command requested by " + update.effective_user.username)
 
-def get_start_message():
-    return "Welcome to dcaboost! Use /help to retrieve the command list"
+def get_start_message(bot, chat_id):
+    text = "Welcome to dcaboost! Use /help to retrieve the command list"
+    bot.send_message(chat_id=chat_id, text=text)
 
-def get_help_message():
-    return "Here's the command list:\n" \
-        "/wallet to display your wallets\n" \
+def get_help_message(bot, chat_id):
+    text = "Here's the command list:\n" \
         "/status to check the trading engine status\n" \
         "/startengine to start the trading engine\n" \
         "/stopengine to stop the trading engine\n"
+    bot.send_message(chat_id=chat_id, text=text)
 
-def get_unknown_message():
-    return "Sorry, I didn't understand that command."
+def get_unknown_message(bot, chat_id):
+    text = "Sorry, I didn't understand that command."
+    bot.send_message(chat_id=chat_id, text=text)
 
 def start(update, context):
     genericHandler(update,context, get_start_message)
 
 def displayHelp(update, context):
     genericHandler(update, context, get_help_message)
-
-def displayWallet(update, context):
-    genericHandler(update, context, get_account_summary_text)
 
 def startEngine(update, context):
     genericHandler(update, context, start_trading_engine)
@@ -193,40 +191,38 @@ def get_trades(crypto, base, start_time, end_time = None):
             trades = json_result["result"]["trade_list"]
     return trades
 
-def start_trading_engine():
-    result = ""
+def start_trading_engine(bot, chat_id):
+    text = ""
     global TRADING_ENGINE_ACTIVE
     if not TRADING_ENGINE_ACTIVE:
         TRADING_ENGINE_ACTIVE = 1
-        tradingEngineThread = threading.Thread(target = execute_trading_engine)
+        tradingEngineThread = threading.Thread(target = execute_trading_engine, args = [bot, chat_id])
         tradingEngineThread.start()
-        result = "Trading engine correctly started"
+        text = "Trading engine correctly started"
     else:
-        result =  "Trading engine is already running"
-    print(result)
-    return result
+        text =  "Trading engine is already running"
+    bot.send_message(chat_id=chat_id, text=text)
 
-def stop_trading_engine():
-    result = ""
+def stop_trading_engine(bot, chat_id):
+    text = ""
     global TRADING_ENGINE_ACTIVE
     if TRADING_ENGINE_ACTIVE:
         TRADING_ENGINE_ACTIVE = 0
-        result = "Trading engine stopped"
+        text = "Trading engine stopped"
     else:
-        result = "Trading engine already stopped"
-    print(result)
-    return result
+        text = "Trading engine already stopped"
+    bot.send_message(chat_id=chat_id, text=text)
 
-def get_trading_engine_status_text():
-    result = ""
+def get_trading_engine_status_text(bot, chat_id):
+    text = ""
     global TRADING_ENGINE_ACTIVE
     if TRADING_ENGINE_ACTIVE:
-        result = "Trading engine is running"
+        text = "Trading engine is running"
     else:
-        result = "Trading engine is not running"
-    return result
+        text = "Trading engine is not running"
+    bot.send_message(chat_id=chat_id, text=text)
 
-def execute_trading_engine():
+def execute_trading_engine(bot, chat_id):
     try:
         settings = get_settings()
         dca_settings = settings[DCA_SETTINGS_KEY]
@@ -236,25 +232,33 @@ def execute_trading_engine():
                 base = dca[BASE_CURRENCY_KEY]
                 buy_amount = dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
                 frequency = dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
-                print(time.strftime("%Y-%m-%d %H:%M:%S") + " Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds")
-                dca_thread = threading.Thread(target = execute_dca, args = (settings, crypto, base, buy_amount, frequency), daemon = True)
+                text = "Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds"
+                bot.send_message(chat_id=chat_id, text=text)
+                dca_thread = threading.Thread(target = execute_dca, args = (settings, crypto, base, buy_amount, frequency, bot, chat_id), daemon = True)
                 time.sleep(1)
                 dca_thread.start()
     except Exception:
         stop_trading_engine()
-        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Error in the execution of the engine: " + str(traceback.print_exc()))
+        text = time.strftime("%Y-%m-%d %H:%M:%S") + " Error in the execution of the engine: " + str(traceback.print_exc())
+        print(text)
+        text = "An error occurred"
+        bot.send_message(chat_id=chat_id, text=text)
         start_trading_engine()
     return
 
-def execute_dca(settings, crypto, base, buy_amount, frequency):
+def execute_dca(settings, crypto, base, buy_amount, frequency, bot, chat_id):
     global TRADING_ENGINE_ACTIVE
     while TRADING_ENGINE_ACTIVE:
-        transfer_to_master_account(settings, crypto)
-        transfer_to_master_account(settings, base)
-        wait_from_last_trade(crypto, base, frequency)
-        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + str(buy_amount) + " " + base + " from " + MASTER_ACCOUNT)
+        text = transfer_to_master_account(settings, crypto)
+        bot.send_message(chat_id=chat_id, text=text)
+        text = transfer_to_master_account(settings, base)
+        bot.send_message(chat_id=chat_id, text=text)
+        wait_from_last_trade(crypto, base, frequency, bot, chat_id)
+        text = "Transfering " + str(buy_amount) + " " + base + " from " + MASTER_ACCOUNT
+        bot.send_message(chat_id=chat_id, text=text)
         transfer_amount(MASTER_ACCOUNT,SUB_ACCOUNT, buy_amount, base)
-        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Buying " + str(buy_amount) + " " + base + " of " + crypto)
+        text = "Buying " + str(buy_amount) + " " + base + " of " + crypto
+        bot.send_message(chat_id=chat_id, text=text)
         order = create_buy_order(crypto, base, buy_amount)
         order_id = get_order_id(order)
         if order_id:
@@ -262,14 +266,16 @@ def execute_dca(settings, crypto, base, buy_amount, frequency):
             print(order_detail)
 
 def transfer_to_master_account(settings, currency):
+    text = ""
     available_quantity = get_available_quantity(currency)
     if available_quantity > 0:
         transfer_amount(SUB_ACCOUNT, MASTER_ACCOUNT, available_quantity, currency)
-        print(time.strftime("%Y-%m-%d %H:%M:%S") + " Transfering " + amount_format(available_quantity) + " " + currency + " from " + settings[API_LABEL_KEY])
+        text = "Transfering " + amount_format(available_quantity) + " " + currency + " from " + settings[API_LABEL_KEY]
     else:
-        print(time.strftime("%Y-%m-%d %H:%M:%S") + " No " + currency + " available for transfer from " + settings[API_LABEL_KEY])
+        text = "No " + currency + " available for transfer from " + settings[API_LABEL_KEY]
+    return text
 
-def wait_from_last_trade(crypto, base, frequency):
+def wait_from_last_trade(crypto, base, frequency, bot, chat_id):
     expected_last_trade = (int(time.time()) - frequency) * 1000
     time_until_next_trade = frequency
     trades = get_trades(crypto, base, expected_last_trade)
@@ -281,7 +287,8 @@ def wait_from_last_trade(crypto, base, frequency):
         time_until_next_trade = int((most_recent_trade + frequency*1000 - int(time.time()*1000))/1000)
     elif trades is not None:
         time_until_next_trade = 1
-    print(time.strftime("%Y-%m-%d %H:%M:%S") + " Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed")
+    text = "Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed"
+    bot.send_message(chat_id=chat_id, text=text)
     time.sleep(time_until_next_trade)
 
 credentials = get_settings()
@@ -290,14 +297,12 @@ updater = Updater(token=tokenData)
 dispatcher = updater.dispatcher
 start_handler = CommandHandler('start', start)
 displayCommand_handler = CommandHandler('help', displayHelp)
-displayWallet_handler = CommandHandler('wallet', displayWallet)
 startEngine_handler = CommandHandler('startengine', startEngine)
 stopEngine_handler = CommandHandler('stopengine', stopEngine)
 status_handler = CommandHandler('status', status)
 unknown_handler = MessageHandler(Filters.command, unknown)
 dispatcher.add_handler(start_handler)
 dispatcher.add_handler(displayCommand_handler)
-dispatcher.add_handler(displayWallet_handler)
 dispatcher.add_handler(startEngine_handler)
 dispatcher.add_handler(stopEngine_handler)
 dispatcher.add_handler(status_handler)
