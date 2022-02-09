@@ -17,10 +17,6 @@ MAX_MESSAGE_LENGTH = 4096
 def create_pair(crypto, base):
     return crypto + "_" + base
 
-def get_ratio(currentValue, minValue, maxValue):
-    #Calculate the relative value of currentValue between min and max, where the output if current = min is 1 and if current = max is 0
-    return Decimal(1 - ((Decimal(currentValue)-Decimal(minValue))/(Decimal(maxValue)-Decimal(minValue))))
-
 def get_settings():
     return get_json_data(SETTINGS_FILE)
 
