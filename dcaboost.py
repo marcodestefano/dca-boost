@@ -1,95 +1,27 @@
 from decimal import ROUND_DOWN
-import threading
-import traceback
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-from dcaboostutils import Decimal, json, time, query, query_main, create_pair, get_settings, get_account_summary_text, amount_format
+from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, Decimal, json, time, query, create_pair, amount_format, get_current_subaccount, send_message
 
-TRADING_ENGINE_ACTIVE = 0
 LOCK_QUERY_ACTIVE = 0
-NEGATIVE_BALANCE = "NEGATIVE_BALANCE"
-API_LABEL_KEY = "APILabel"
 
 MASTER_ACCOUNT = "MASTER"
 SUB_ACCOUNT = "SUBACCOUNT"
-
-DCA_SETTINGS_KEY = "DCA"
 
 CRYPTO_CURRENCY_KEY = "CRYPTO_CURRENCY"
 BASE_CURRENCY_KEY = "BASE_CURRENCY"
 BUY_AMOUNT_IN_BASE_CURRENCY_KEY = "BUY_AMOUNT_IN_BASE_CURRENCY"
 FREQUENCY_IN_HOUR_KEY = "FREQUENCY_IN_HOUR"
-SECONDS_IN_ONE_HOUR = 60*60
+SECONDS_IN_ONE_HOUR = 3600
 
-BOT_TOKEN_KEY = 'TelegramBotToken'
-BOT_USERS_KEY = "Users"
-
-def isAuthorized(update):
-    return update.effective_user.username in get_users()
-
-def get_users():
-    credentials = get_settings()
-    users = credentials[BOT_USERS_KEY]
-    return users
-
-def genericHandler(update, context, function):
-    if(isAuthorized(update)):
-        function(context.bot, update.effective_chat.id)
-    else:
-        print(time.strftime("%Y-%m-%d %H:%M:%S") + " " + function.__name__ + " command requested by " + update.effective_user.username)
-
-def get_start_message(bot, chat_id):
-    text = "Welcome to dcaboost! Use /help to retrieve the command list"
-    bot.send_message(chat_id=chat_id, text=text)
-
-def get_help_message(bot, chat_id):
-    text = "Here's the command list:\n" \
-        "/status to check the trading engine status\n" \
-        "/startengine to start the trading engine\n" \
-        "/stopengine to stop the trading engine\n"
-    bot.send_message(chat_id=chat_id, text=text)
-
-def get_unknown_message(bot, chat_id):
-    text = "Sorry, I didn't understand that command."
-    bot.send_message(chat_id=chat_id, text=text)
-
-def start(update, context):
-    genericHandler(update,context, get_start_message)
-
-def displayHelp(update, context):
-    genericHandler(update, context, get_help_message)
-
-def startEngine(update, context):
-    genericHandler(update, context, start_trading_engine)
-
-def stopEngine(update, context):
-    genericHandler(update, context, stop_trading_engine)
-
-def status(update, context):
-    genericHandler(update, context, get_trading_engine_status_text)
-
-def unknown(update, context):
-    genericHandler(update, context, get_unknown_message)
-
-def get_sub_accounts():
-    json_result = None
-    method = "private/subaccount/get-sub-accounts"
-    params = {
-        }
-    query_result = query_main(method, params)
-    if query_result:
-        json_result = json.loads(query_result.text)
-    return json_result
-
-def get_account_summary(currency = None):
+def get_account_summary(client_id, apikey, apisecret, currency = None):
     method = "private/get-account-summary"
     params = {}
     if currency:
         params["currency"] = currency
-    result = query(method, params)
+    result = query(client_id, apikey, apisecret, method, params)
     return json.loads(result.text)
 
-def get_available_quantity(currency):
-    summary = get_account_summary(currency)
+def get_available_quantity(client_id, apikey, apisecret, currency):
+    summary = get_account_summary(client_id, apikey, apisecret, currency)
     available = 0
     if summary and summary["result"] and summary["result"]["accounts"]:
         available = summary["result"]["accounts"][0]["available"]
@@ -98,42 +30,30 @@ def get_available_quantity(currency):
         return_value = Decimal(str(available)).quantize(Decimal("0.00000001"), rounding=ROUND_DOWN)
     return return_value
 
-def get_current_subaccount():
-    settings = get_settings()
-    account_label = settings[API_LABEL_KEY]
-    result = None
-    sub_accounts = get_sub_accounts()
-    if sub_accounts and sub_accounts["result"]:
-        for sub_account in sub_accounts["result"]["sub_account_list"]:
-            if sub_account["label"] == account_label:
-                result = sub_account
-                break
-    return result
-
-def get_sub_account_uuid():
+def get_sub_account_uuid(client_id):
     sub_account_uuid = None
-    sub_account = get_current_subaccount()
+    sub_account = get_current_subaccount(client_id)
     if sub_account:
         sub_account_uuid = sub_account["uuid"]
     return sub_account_uuid
 
-def transfer_amount(from_account, to_account, amount, currency):
+def transfer_amount(client_id, apikey, apisecret, from_account, to_account, amount, currency):
     json_result = None
     if amount>0:
         method = "private/subaccount/transfer"
         params = {
             "from": from_account,
             "to": to_account,
-            "sub_account_uuid": get_sub_account_uuid(),
+            "sub_account_uuid": get_sub_account_uuid(client_id),
             "currency": currency,
             "amount": str(amount)
             }
-        query_result = query_main(method, params)
+        query_result = query(client_id, apikey, apisecret, method, params)
         if query_result is not None:
             json_result = json.loads(query_result.text)
     return json_result
 
-def create_buy_order(crypto, base, buy_amount):
+def create_buy_order(client_id, settings, crypto, base, buy_amount):
     json_result = None
     method = "private/create-order"
     params = {
@@ -142,7 +62,7 @@ def create_buy_order(crypto, base, buy_amount):
         "type": "MARKET",
         "notional": buy_amount
         }
-    query_result = query(method, params)
+    query_result = query(client_id, settings[DATA_SUB_API_KEY], settings[DATA_SUB_API_SECRET], method, params)
     if query_result:
         json_result = json.loads(query_result.text)
     return json_result
@@ -164,7 +84,7 @@ def get_order_id(order):
         order_id = order["result"]["order_id"]
     return order_id
 
-def get_trades(crypto, base, start_time, end_time = None):
+def get_trades(client_id, apikey, apisecret, crypto, base, start_time, end_time = None):
     method = "private/get-trades"
     params = {
         "instrument_name": create_pair(crypto, base),
@@ -180,7 +100,7 @@ def get_trades(crypto, base, start_time, end_time = None):
             if not LOCK_QUERY_ACTIVE:
                 LOCK_QUERY_ACTIVE = 1
                 time.sleep(1)
-                result = query(method, params)
+                result = query(client_id, apikey, apisecret, method, params)
                 LOCK_QUERY_ACTIVE = 0
                 exit_query = 1
             else:
@@ -192,95 +112,26 @@ def get_trades(crypto, base, start_time, end_time = None):
             trades = json_result["result"]["trade_list"]
     return trades
 
-def start_trading_engine(bot, chat_id):
+def transfer_to_master_account(client_id, settings, currency):
     text = ""
-    global TRADING_ENGINE_ACTIVE
-    if not TRADING_ENGINE_ACTIVE:
-        TRADING_ENGINE_ACTIVE = 1
-        tradingEngineThread = threading.Thread(target = execute_trading_engine, args = [bot, chat_id])
-        tradingEngineThread.start()
-        text = "Trading engine correctly started"
-    else:
-        text =  "Trading engine is already running"
-    bot.send_message(chat_id=chat_id, text=text)
-
-def stop_trading_engine(bot, chat_id):
-    text = ""
-    global TRADING_ENGINE_ACTIVE
-    if TRADING_ENGINE_ACTIVE:
-        TRADING_ENGINE_ACTIVE = 0
-        text = "Trading engine stopped"
-    else:
-        text = "Trading engine already stopped"
-    bot.send_message(chat_id=chat_id, text=text)
-
-def get_trading_engine_status_text(bot, chat_id):
-    text = ""
-    global TRADING_ENGINE_ACTIVE
-    if TRADING_ENGINE_ACTIVE:
-        text = "Trading engine is running"
-    else:
-        text = "Trading engine is not running"
-    bot.send_message(chat_id=chat_id, text=text)
-
-def execute_trading_engine(bot, chat_id):
-    try:
-        settings = get_settings()
-        dca_settings = settings[DCA_SETTINGS_KEY]
-        if dca_settings:
-            for dca in dca_settings:
-                crypto = dca[CRYPTO_CURRENCY_KEY]
-                base = dca[BASE_CURRENCY_KEY]
-                buy_amount = dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
-                frequency = dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
-                text = "Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds"
-                bot.send_message(chat_id=chat_id, text=text)
-                dca_thread = threading.Thread(target = execute_dca, args = (settings, crypto, base, buy_amount, frequency, bot, chat_id), daemon = True)
-                time.sleep(1)
-                dca_thread.start()
-    except Exception:
-        stop_trading_engine()
-        text = time.strftime("%Y-%m-%d %H:%M:%S") + " Error in the execution of the engine: " + str(traceback.print_exc())
-        print(text)
-        text = "An error occurred"
-        bot.send_message(chat_id=chat_id, text=text)
-        start_trading_engine()
-    return
-
-def execute_dca(settings, crypto, base, buy_amount, frequency, bot, chat_id):
-    global TRADING_ENGINE_ACTIVE
-    while TRADING_ENGINE_ACTIVE:
-        text = transfer_to_master_account(settings, crypto)
-        bot.send_message(chat_id=chat_id, text=text)
-        text = transfer_to_master_account(settings, base)
-        bot.send_message(chat_id=chat_id, text=text)
-        wait_from_last_trade(crypto, base, frequency, bot, chat_id)
-        text = "Transfering " + str(buy_amount) + " " + base + " from " + MASTER_ACCOUNT
-        bot.send_message(chat_id=chat_id, text=text)
-        message = transfer_amount(MASTER_ACCOUNT,SUB_ACCOUNT, buy_amount, base)
-        if NEGATIVE_BALANCE in str(message):
-            text = "You have less than " + str(buy_amount) + " " + base + " available to buy " + crypto + ". Trying again in " + str(int(frequency/4)) + " seconds"
-            bot.send_message(chat_id=chat_id, text=text)
-            time.sleep(int(frequency/4))
-        else:
-            text = "Buying " + str(buy_amount) + " " + base + " of " + crypto
-            bot.send_message(chat_id=chat_id, text=text)
-            create_buy_order(crypto, base, buy_amount)
-
-def transfer_to_master_account(settings, currency):
-    text = ""
-    available_quantity = get_available_quantity(currency)
+    apikey = settings[DATA_SUB_API_KEY]
+    apisecret = settings[DATA_SUB_API_SECRET]
+    available_quantity = get_available_quantity(client_id, apikey, apisecret, currency)
     if available_quantity > 0:
-        transfer_amount(SUB_ACCOUNT, MASTER_ACCOUNT, available_quantity, currency)
-        text = "Transfering " + amount_format(available_quantity) + " " + currency + " from " + settings[API_LABEL_KEY]
+        transfer_amount(client_id, apikey, apisecret, SUB_ACCOUNT, MASTER_ACCOUNT, available_quantity, currency)
+        text = "Transfering " + amount_format(available_quantity) + " " + currency + " from " + SUB_ACCOUNT
     else:
-        text = "No " + currency + " available for transfer from " + settings[API_LABEL_KEY]
+        text = "No " + currency + " available for transfer from " + SUB_ACCOUNT
     return text
 
-def wait_from_last_trade(crypto, base, frequency, bot, chat_id):
+def transfer_to_sub_account(client_id, settings, amount, currency):
+    text = transfer_amount(client_id, settings[DATA_MAIN_API_KEY], settings[DATA_MAIN_API_SECRET], MASTER_ACCOUNT, SUB_ACCOUNT, amount, currency)
+    return text
+
+def wait_from_last_trade(client_id, settings, crypto, base, frequency, update, context):
     expected_last_trade = (int(time.time()) - frequency) * 1000
     time_until_next_trade = frequency
-    trades = get_trades(crypto, base, expected_last_trade)
+    trades = get_trades(client_id, settings[DATA_SUB_API_KEY], settings[DATA_SUB_API_SECRET], crypto, base, expected_last_trade)
     if trades:
         most_recent_trade = 0
         for trade in trades:
@@ -290,25 +141,5 @@ def wait_from_last_trade(crypto, base, frequency, bot, chat_id):
     elif trades is not None:
         time_until_next_trade = 1
     text = "Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed"
-    bot.send_message(chat_id=chat_id, text=text)
+    send_message(update, context, text)
     time.sleep(time_until_next_trade)
-
-credentials = get_settings()
-tokenData = credentials[BOT_TOKEN_KEY]
-updater = Updater(token=tokenData)
-dispatcher = updater.dispatcher
-start_handler = CommandHandler('start', start)
-displayCommand_handler = CommandHandler('help', displayHelp)
-startEngine_handler = CommandHandler('startengine', startEngine)
-stopEngine_handler = CommandHandler('stopengine', stopEngine)
-status_handler = CommandHandler('status', status)
-unknown_handler = MessageHandler(Filters.command, unknown)
-dispatcher.add_handler(start_handler)
-dispatcher.add_handler(displayCommand_handler)
-dispatcher.add_handler(startEngine_handler)
-dispatcher.add_handler(stopEngine_handler)
-dispatcher.add_handler(status_handler)
-dispatcher.add_handler(unknown_handler)
-updater.start_polling()
-print("Bot is active and running")
-updater.idle()
