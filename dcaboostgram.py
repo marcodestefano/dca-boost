@@ -2,7 +2,7 @@ import os
 import threading
 import traceback
 from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters
-from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, DATA_DCA_RUNNING, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask
+from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, DATA_DCA_RUNNING, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
 from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_from_last_trade, create_buy_order
 
 BOT_TOKEN_KEY = 'TelegramBotToken'
@@ -180,6 +180,8 @@ def dca_to_text(dca) -> str:
         text = text + "day"
     elif dca[FREQUENCY_IN_HOUR_KEY] == 168:
         text = text + "week"
+    else:
+        text = text + amount_format(dca[FREQUENCY_IN_HOUR_KEY]*60) + " minutes"
     return text
 
 def calculate_frequency_in_hours(frequency) -> int:
