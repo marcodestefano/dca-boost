@@ -263,7 +263,7 @@ def execute_trading_engine(update, context) -> None:
                 crypto = dca[CRYPTO_CURRENCY_KEY]
                 base = dca[BASE_CURRENCY_KEY]
                 buy_amount = dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
-                frequency = dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR
+                frequency = int(dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR)
                 text = "Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds"
                 send_message(update, context, text)
                 dca_thread = threading.Thread(target = execute_dca, args = (crypto, base, buy_amount, frequency, update, context), daemon = True)

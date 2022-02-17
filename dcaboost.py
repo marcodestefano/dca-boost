@@ -129,15 +129,15 @@ def transfer_to_sub_account(client_id, settings, amount, currency):
     return text
 
 def wait_from_last_trade(client_id, settings, crypto, base, frequency, update, context):
-    expected_last_trade = (int(time.time()) - int(frequency)) * 1000
-    time_until_next_trade = int(frequency)
+    expected_last_trade = (int(time.time()) - frequency) * 1000
+    time_until_next_trade = frequency
     trades = get_trades(client_id, settings[DATA_SUB_API_KEY], settings[DATA_SUB_API_SECRET], crypto, base, expected_last_trade)
     if trades:
         most_recent_trade = 0
         for trade in trades:
             if most_recent_trade < trade["create_time"]:
                 most_recent_trade = trade["create_time"]
-        time_until_next_trade = int((most_recent_trade + int(frequency)*1000 - int(time.time()*1000))/1000)
+        time_until_next_trade = int((most_recent_trade + frequency*1000 - int(time.time()*1000))/1000)
     elif trades is not None:
         time_until_next_trade = 1
     text = "Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed"
