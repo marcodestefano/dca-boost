@@ -127,7 +127,7 @@ def transfer_to_sub_account(client_id, settings, amount, currency):
     text = transfer_amount(client_id, settings[DATA_MAIN_API_KEY], settings[DATA_MAIN_API_SECRET], MASTER_ACCOUNT, SUB_ACCOUNT, amount, currency)
     return text
 
-def wait_from_last_trade(client_id, settings, crypto, base, frequency, update, context):
+def wait_time_from_last_trade(client_id, settings, crypto, base, frequency, update, context):
     expected_last_trade = (int(time.time()) - frequency) * 1000
     time_until_next_trade = frequency
     trades = get_trades(client_id, settings[DATA_SUB_API_KEY], settings[DATA_SUB_API_SECRET], crypto, base, expected_last_trade)
@@ -143,4 +143,4 @@ def wait_from_last_trade(client_id, settings, crypto, base, frequency, update, c
     if time_until_next_trade == 1:
         text = "Buying " + crypto + " immediately"
     send_message(update, context, text)
-    time.sleep(time_until_next_trade-3)
+    return time_until_next_trade-3
