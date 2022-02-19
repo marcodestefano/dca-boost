@@ -11,10 +11,10 @@ NEGATIVE_BALANCE = "NEGATIVE_BALANCE"
 HOURLY_FREQUENCE = "HOURLY"
 DAILY_FREQUENCE = "DAILY"
 WEEKLY_FREQUENCE = "WEEKLY"
-FREQUENCIES = [HOURLY_FREQUENCE, DAILY_FREQUENCE, WEEKLY_FREQUENCE]
+BI_WEEKLY_FREQUENCE = "BI-WEEKLY"
+FREQUENCIES = [HOURLY_FREQUENCE, DAILY_FREQUENCE, WEEKLY_FREQUENCE, BI_WEEKLY_FREQUENCE]
 
 MAIN_API_KEY, MAIN_API_SECRET, SUB_API_KEY, SUB_API_SECRET, SUB_API_LABEL = range(5)
-DCA_SETTINGS = range(1)
 
 RUNNING_ENGINES = {}
 
@@ -124,8 +124,8 @@ def my_dca(update: Update, context: CallbackContext) -> None:
         text = text + "2. The crypto you want to buy\n"
         text = text + "3. The amount you want to invest\n"
         text = text + "4. The frequency of your investment\n"
-        text = text + "Each value has to be separated by a space. The frequency can be daily or weekly.\n"
-        text = text + "For example, write /adddca USDC BTC 10 WEEKLY if you want to buy 10 USDC of BTC every week\n\n"
+        text = text + "Each value has to be separated by a space. The frequency can be DAILY, WEEKLY or BI-WEEKLY.\n"
+        text = text + "For example, write /adddca USDC BTC 10 BI-WEEKLY if you want to buy 10 USDC of BTC every two weeks\n\n"
         text = text + "If you want to remove a DCA strategy, please send /removedca command with the base and crypto currencies of DCA you want to remove, separated by space.\n"
         text = text + "For example, write /removedca USDC BTC if you want to remove your DCA strategy of buying BTC with USDC\n\n"
     send_message(update, context, text)
@@ -199,6 +199,8 @@ def calculate_frequency_in_hours(frequency: str) -> int:
         result = 24
     elif(frequency == WEEKLY_FREQUENCE):
         result = 24*7
+    elif(frequency == BI_WEEKLY_FREQUENCE):
+        result = 24*14
     return result
 
 def start_engine(update: Update, context: CallbackContext) -> None:

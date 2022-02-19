@@ -16,8 +16,6 @@ DATA_SUB_API_SECRET = "SubAccountAPISecret"
 DATA_SUB_API_LABEL = "SubAccountAPILabel"
 DATA_DCA_CONFIG = "DCA"
 
-MAX_MESSAGE_LENGTH = 4096
-
 def send_message(update, context, text) -> None:
     context.bot.send_message(chat_id = update.effective_chat.id, text=text)
 

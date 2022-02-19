@@ -1,5 +1,4 @@
-from decimal import ROUND_DOWN
-from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, Decimal, json, time, query, create_pair, amount_format, get_current_subaccount, send_message
+from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, ROUND_DOWN, Decimal, json, time, query, create_pair, amount_format, get_current_subaccount, send_message
 
 LOCK_QUERY_ACTIVE = 0
 
