@@ -1,5 +1,4 @@
 import threading
-import traceback
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters, CallbackContext
 from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
@@ -27,7 +26,7 @@ def start(update: Update, context: CallbackContext) -> None:
     text = "Welcome to dcaboost, " + first_name + "! Use /setup to setup your account"
     if get_account(chat_id):
         text = "Welcome back to dcaboost, " + first_name + "! You already have an account, use /help to display the available commands"
-    bot.send_message(chat_id=chat_id, text=text)
+    send_message(update, context, text)
 
 def help(update: Update, context: CallbackContext) -> None:
     text = "Here's the command list:\n" \
@@ -52,57 +51,57 @@ def setup(update: Update, context: CallbackContext) -> int:
         text = """Great, let's start the setup of your account. To cancel the operation, just send /cancel anytime.\n 
         Please write your main account Api Key"""
         conversation_next_step = MAIN_API_KEY
-    update.message.reply_text(text)
+    send_message(update, context, text)
     return conversation_next_step
 
 def set_main_api_key(update: Update, context: CallbackContext) -> int:
     apikey = update.message.text
     context.user_data[DATA_MAIN_API_KEY] = apikey
     text = "Ok, now please write your main account API Secret"
-    update.message.reply_text(text)
+    send_message(update, context, text)
     return MAIN_API_SECRET
 
 def set_main_api_secret(update: Update, context: CallbackContext) -> int:
     apisecret = update.message.text
     context.user_data[DATA_MAIN_API_SECRET] = apisecret
     text = "Great, the main account is set. Now please write your sub account API Key"
-    update.message.reply_text(text)
+    send_message(update, context, text)
     return SUB_API_KEY
 
 def set_sub_api_key(update: Update, context: CallbackContext) -> int:
     subapikey = update.message.text
     context.user_data[DATA_SUB_API_KEY] = subapikey
     text = "And now please write the sub account API Secret"
-    update.message.reply_text(text)
+    send_message(update, context, text)
     return SUB_API_SECRET
 
 def set_sub_api_secret(update: Update, context: CallbackContext) -> int:
     subapisecret = update.message.text
     context.user_data[DATA_SUB_API_SECRET] = subapisecret
     text = "We are almost done, let's also set the sub account API Label"
-    update.message.reply_text(text)
+    send_message(update, context, text)
     return SUB_API_LABEL
 
 def set_sub_api_label(update: Update, context: CallbackContext) -> int:
     subapilabel = update.message.text
     context.user_data[DATA_SUB_API_LABEL] = subapilabel
     text = "Perfect, your dcaboost account is setup. As a last step, I am going test it to ensure everything works fine. Please wait few seconds."
-    update.message.reply_text(text)
+    send_message(update, context, text)
     text = "Testing connection for\n"
     text = text + "Main API Key: " + mask(context.user_data[DATA_MAIN_API_KEY]) + "\n"
     text = text + "Main API Secret: " + mask(context.user_data[DATA_MAIN_API_SECRET]) + "\n"
     text = text + "Subaccount API Key: " + mask(context.user_data[DATA_SUB_API_KEY]) + "\n"
     text = text + "Subaccount API Secret: " + mask(context.user_data[DATA_SUB_API_SECRET]) + "\n"
     text = text + "Subaccount API Label: " + context.user_data[DATA_SUB_API_LABEL] + "\n"
-    update.message.reply_text(text)
+    send_message(update, context, text)
     test_result = test_api(update.effective_chat.id, context.user_data[DATA_MAIN_API_KEY], context.user_data[DATA_MAIN_API_SECRET], context.user_data[DATA_SUB_API_KEY], context.user_data[DATA_SUB_API_SECRET],  context.user_data[DATA_SUB_API_LABEL])
     if test_result["test_result"]:
         text = "Perfect, the setup is completed. You are now ready to configure your recurrent crypto purchase. Just send /mydca once you're ready."
         save_account(update.effective_chat.id, context.user_data[DATA_MAIN_API_KEY], context.user_data[DATA_MAIN_API_SECRET], context.user_data[DATA_SUB_API_KEY], context.user_data[DATA_SUB_API_SECRET],  context.user_data[DATA_SUB_API_LABEL])
-        update.message.reply_text(text)
+        send_message(update, context, text)
     else:
         text = "Sorry, there is an issue with your account setup. I was " + test_result["text"] + ". Please check your data again and repeat the /setup of your account"
-        update.message.reply_text(text)
+        send_message(update, context, text)
     return ConversationHandler.END
 
 def my_dca(update: Update, context: CallbackContext) -> None:
@@ -178,8 +177,9 @@ def unknown(update: Update, context: CallbackContext) -> None:
     send_message(update, context, text)
 
 def error_handler(update: Update, context: CallbackContext) -> None:
-    text = "An error occurred"
+    text = "An error occurred, DCA engine has been stopped. Please restart it manually with /startengine"
     send_message(update, context, text)
+    stop_engine(update, context)
 
 def dca_to_text(dca: dict) -> str:
     text = "Buy " + str(dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]) + " " + dca[BASE_CURRENCY_KEY] + " of " + dca[CRYPTO_CURRENCY_KEY] + " every "
@@ -250,26 +250,19 @@ def status(update: Update, context: CallbackContext) -> None:
     send_message(update, context, text)
 
 def execute_trading_engine(update: Update, context: CallbackContext) -> None:
-    try:
-        settings = get_account(update.effective_chat.id)
-        dca_settings = settings[DATA_DCA_CONFIG]
-        if dca_settings:
-            for dca in dca_settings:
-                crypto = dca[CRYPTO_CURRENCY_KEY]
-                base = dca[BASE_CURRENCY_KEY]
-                buy_amount = dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
-                frequency = int(dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR)
-                text = "Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds"
-                send_message(update, context, text)
-                dca_thread = threading.Thread(target = execute_dca, args = (crypto, base, buy_amount, frequency, update, context), daemon = True)
-                time.sleep(1)
-                dca_thread.start()
-    except Exception:
-        text = "An error occurred. Please restart the engine"
-        send_message(update, context, text)
-        stop_engine(update, context)
-        text = time.strftime("%Y-%m-%d %H:%M:%S") + " Error in the execution of the engine: " + str(traceback.print_exc())
-    return
+    settings = get_account(update.effective_chat.id)
+    dca_settings = settings[DATA_DCA_CONFIG]
+    if dca_settings:
+        for dca in dca_settings:
+            crypto = dca[CRYPTO_CURRENCY_KEY]
+            base = dca[BASE_CURRENCY_KEY]
+            buy_amount = dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
+            frequency = int(dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR)
+            text = "Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds"
+            send_message(update, context, text)
+            dca_thread = threading.Thread(target = execute_dca, args = (crypto, base, buy_amount, frequency, update, context), daemon = True)
+            time.sleep(1)
+            dca_thread.start()
 
 def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, update: Update, context: CallbackContext):
     client_id = update.effective_chat.id
