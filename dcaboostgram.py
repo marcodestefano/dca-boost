@@ -1,6 +1,7 @@
 import threading
 import traceback
-from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters, CallbackContext
 from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
 from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_from_last_trade, create_buy_order
 
@@ -17,7 +18,7 @@ DCA_SETTINGS = range(1)
 
 RUNNING_ENGINES = {}
 
-def start(update, context):
+def start(update: Update, context: CallbackContext) -> None:
     first_name = update.effective_chat.first_name
     if not first_name:
         first_name = ""
@@ -28,7 +29,7 @@ def start(update, context):
         text = "Welcome back to dcaboost, " + first_name + "! You already have an account, use /help to display the available commands"
     bot.send_message(chat_id=chat_id, text=text)
 
-def help(update, context) -> None:
+def help(update: Update, context: CallbackContext) -> None:
     text = "Here's the command list:\n" \
         "/setup to setup your account\n" \
         "/mydca to display your DCA strategy\n" \
@@ -40,7 +41,7 @@ def help(update, context) -> None:
         "/deleteaccount to delete your account"
     send_message(update, context, text)
 
-def setup(update, context):
+def setup(update: Update, context: CallbackContext) -> int:
     chat_id = update.effective_chat.id
     text = ""
     conversation_next_step = ConversationHandler.END
@@ -54,35 +55,35 @@ def setup(update, context):
     update.message.reply_text(text)
     return conversation_next_step
 
-def set_main_api_key(update, context):
+def set_main_api_key(update: Update, context: CallbackContext) -> int:
     apikey = update.message.text
     context.user_data[DATA_MAIN_API_KEY] = apikey
     text = "Ok, now please write your main account API Secret"
     update.message.reply_text(text)
     return MAIN_API_SECRET
 
-def set_main_api_secret(update, context):
+def set_main_api_secret(update: Update, context: CallbackContext) -> int:
     apisecret = update.message.text
     context.user_data[DATA_MAIN_API_SECRET] = apisecret
     text = "Great, the main account is set. Now please write your sub account API Key"
     update.message.reply_text(text)
     return SUB_API_KEY
 
-def set_sub_api_key(update, context):
+def set_sub_api_key(update: Update, context: CallbackContext) -> int:
     subapikey = update.message.text
     context.user_data[DATA_SUB_API_KEY] = subapikey
     text = "And now please write the sub account API Secret"
     update.message.reply_text(text)
     return SUB_API_SECRET
 
-def set_sub_api_secret(update, context):
+def set_sub_api_secret(update: Update, context: CallbackContext) -> int:
     subapisecret = update.message.text
     context.user_data[DATA_SUB_API_SECRET] = subapisecret
     text = "We are almost done, let's also set the sub account API Label"
     update.message.reply_text(text)
     return SUB_API_LABEL
 
-def set_sub_api_label(update, context):
+def set_sub_api_label(update: Update, context: CallbackContext) -> int:
     subapilabel = update.message.text
     context.user_data[DATA_SUB_API_LABEL] = subapilabel
     text = "Perfect, your dcaboost account is setup. As a last step, I am going test it to ensure everything works fine. Please wait few seconds."
@@ -104,7 +105,7 @@ def set_sub_api_label(update, context):
         update.message.reply_text(text)
     return ConversationHandler.END
 
-def my_dca(update, context):
+def my_dca(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
     text = ""
     account = get_account(chat_id)
@@ -127,9 +128,9 @@ def my_dca(update, context):
         text = text + "For example, write /adddca USDC BTC 10 WEEKLY if you want to buy 10 USDC of BTC every week\n\n"
         text = text + "If you want to remove a DCA strategy, please send /removedca command with the base and crypto currencies of DCA you want to remove, separated by space.\n"
         text = text + "For example, write /removedca USDC BTC if you want to remove your DCA strategy of buying BTC with USDC\n\n"
-    update.message.reply_text(text)
+    send_message(update, context, text)
 
-def add_dca(update, context):
+def add_dca(update: Update, context: CallbackContext) -> None:
     new_dca = {}
     dca_value = context.args
     text = ""
@@ -170,9 +171,17 @@ def add_dca(update, context):
             text = "You have to write exactly four values, separated by space"
     else:
         text = "You don't have an account setup yet. Please /setup your account first"
-    update.message.reply_text(text)
+    send_message(update, context, text)
 
-def dca_to_text(dca) -> str:
+def unknown(update: Update, context: CallbackContext) -> None:
+    text = "Sorry, I didn't understand that command"
+    send_message(update, context, text)
+
+def error_handler(update: Update, context: CallbackContext) -> None:
+    text = "An error occurred"
+    send_message(update, context, text)
+
+def dca_to_text(dca: dict) -> str:
     text = "Buy " + str(dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]) + " " + dca[BASE_CURRENCY_KEY] + " of " + dca[CRYPTO_CURRENCY_KEY] + " every "
     if dca[FREQUENCY_IN_HOUR_KEY] == 1:
         text = text + "hour"
@@ -184,7 +193,7 @@ def dca_to_text(dca) -> str:
         text = text + amount_format(int(dca[FREQUENCY_IN_HOUR_KEY]*60)) + " minutes"
     return text
 
-def calculate_frequency_in_hours(frequency) -> int:
+def calculate_frequency_in_hours(frequency: str) -> int:
     result = 1
     if(frequency == DAILY_FREQUENCE):
         result = 24
@@ -192,11 +201,7 @@ def calculate_frequency_in_hours(frequency) -> int:
         result = 24*7
     return result
 
-def unknown(update, context) -> None:
-    text = "Sorry, I didn't understand that command"
-    send_message(update, context, text)
-
-def start_engine(update, context) -> None:
+def start_engine(update: Update, context: CallbackContext) -> None:
     text = ""
     client_id = update.effective_chat.id
     account = get_account(client_id)
@@ -213,7 +218,7 @@ def start_engine(update, context) -> None:
         text = "You don't have an account yet. Please send /setup to create it"
     send_message(update, context, text)
 
-def stop_engine(update, context) -> None:
+def stop_engine(update: Update, context: CallbackContext) -> None:
     text = ""
     client_id = update.effective_chat.id
     account = get_account(client_id)
@@ -228,7 +233,7 @@ def stop_engine(update, context) -> None:
         text = "You don't have an account yet. Please send /setup to create it"
     send_message(update, context, text)
 
-def status(update, context) -> None:
+def status(update: Update, context: CallbackContext) -> None:
     text = ""
     client_id = update.effective_chat.id
     account = get_account(client_id)
@@ -242,7 +247,7 @@ def status(update, context) -> None:
         text = "You don't have an account yet. Please send /setup to create it"
     send_message(update, context, text)
 
-def execute_trading_engine(update, context) -> None:
+def execute_trading_engine(update: Update, context: CallbackContext) -> None:
     try:
         settings = get_account(update.effective_chat.id)
         dca_settings = settings[DATA_DCA_CONFIG]
@@ -262,10 +267,9 @@ def execute_trading_engine(update, context) -> None:
         send_message(update, context, text)
         stop_engine(update, context)
         text = time.strftime("%Y-%m-%d %H:%M:%S") + " Error in the execution of the engine: " + str(traceback.print_exc())
-        start_engine(update, context)
     return
 
-def execute_dca(crypto, base, buy_amount, frequency, update, context):
+def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, update: Update, context: CallbackContext):
     client_id = update.effective_chat.id
     settings = get_account(client_id)
     global RUNNING_ENGINES
@@ -318,5 +322,6 @@ dispatcher.add_handler(start_engine_handler)
 dispatcher.add_handler(stop_engine_handler)
 dispatcher.add_handler(status_handler)
 dispatcher.add_handler(unknown_handler)
+dispatcher.add_error_handler(error_handler)
 updater.start_polling()
 updater.idle()
