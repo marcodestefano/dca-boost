@@ -141,5 +141,7 @@ def wait_from_last_trade(client_id, settings, crypto, base, frequency, update, c
     elif trades is not None:
         time_until_next_trade = 1
     text = "Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed"
+    if time_until_next_trade == 1:
+        text = "Buying " + crypto + " immediately"
     send_message(update, context, text)
-    time.sleep(time_until_next_trade)
+    time.sleep(time_until_next_trade-3)

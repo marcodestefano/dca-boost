@@ -1,13 +1,11 @@
-import os
 import threading
 import traceback
 from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters
-from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, DATA_DCA_RUNNING, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
+from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
 from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_from_last_trade, create_buy_order
 
 BOT_TOKEN_KEY = 'TelegramBotToken'
 NEGATIVE_BALANCE = "NEGATIVE_BALANCE"
-DCA_THREADS = {}
 
 HOURLY_FREQUENCE = "HOURLY"
 DAILY_FREQUENCE = "DAILY"
@@ -16,6 +14,8 @@ FREQUENCIES = [HOURLY_FREQUENCE, DAILY_FREQUENCE, WEEKLY_FREQUENCE]
 
 MAIN_API_KEY, MAIN_API_SECRET, SUB_API_KEY, SUB_API_SECRET, SUB_API_LABEL = range(5)
 DCA_SETTINGS = range(1)
+
+RUNNING_ENGINES = {}
 
 def start(update, context):
     first_name = update.effective_chat.first_name
@@ -181,7 +181,7 @@ def dca_to_text(dca) -> str:
     elif dca[FREQUENCY_IN_HOUR_KEY] == 168:
         text = text + "week"
     else:
-        text = text + amount_format(dca[FREQUENCY_IN_HOUR_KEY]*60) + " minutes"
+        text = text + amount_format(int(dca[FREQUENCY_IN_HOUR_KEY]*60)) + " minutes"
     return text
 
 def calculate_frequency_in_hours(frequency) -> int:
@@ -192,11 +192,6 @@ def calculate_frequency_in_hours(frequency) -> int:
         result = 24*7
     return result
 
-def cancel(update, context):
-    text = "All right, setup canceled."
-    update.message.reply_text(text)
-    return ConversationHandler.END
-
 def unknown(update, context) -> None:
     text = "Sorry, I didn't understand that command"
     send_message(update, context, text)
@@ -206,13 +201,10 @@ def start_engine(update, context) -> None:
     client_id = update.effective_chat.id
     account = get_account(client_id)
     if account:
-        trading_engine_active = account[DATA_DCA_RUNNING]
-        if not trading_engine_active:
-            account[DATA_DCA_RUNNING] = True
-            save_account(client_id, account)
+        global RUNNING_ENGINES
+        if not RUNNING_ENGINES or not RUNNING_ENGINES[client_id]:
+            RUNNING_ENGINES[client_id] = True
             tradingEngineThread = threading.Thread(target = execute_trading_engine, args = [update, context])
-            global DCA_THREADS
-            DCA_THREADS[client_id] = tradingEngineThread
             tradingEngineThread.start()
             text = "Trading engine correctly started"
         else:
@@ -226,13 +218,9 @@ def stop_engine(update, context) -> None:
     client_id = update.effective_chat.id
     account = get_account(client_id)
     if account:
-        trading_engine_active = account[DATA_DCA_RUNNING]
-        if trading_engine_active:
-            account[DATA_DCA_RUNNING] = False
-            save_account(client_id, account)
-            global DCA_THREADS
-            if DCA_THREADS and DCA_THREADS[client_id]:
-                DCA_THREADS[client_id].join()
+        global RUNNING_ENGINES
+        if RUNNING_ENGINES and RUNNING_ENGINES[client_id]:
+            RUNNING_ENGINES[client_id] = False
             text = "Trading engine stopped"
         else:
             text = "Trading engine already stopped"
@@ -245,8 +233,8 @@ def status(update, context) -> None:
     client_id = update.effective_chat.id
     account = get_account(client_id)
     if account:
-        trading_engine_active = account[DATA_DCA_RUNNING]
-        if trading_engine_active:
+        global RUNNING_ENGINES
+        if RUNNING_ENGINES and RUNNING_ENGINES[client_id]:
             text = "Trading engine is running"
         else:
             text = "Trading engine is not running"
@@ -270,7 +258,7 @@ def execute_trading_engine(update, context) -> None:
                 time.sleep(1)
                 dca_thread.start()
     except Exception:
-        text = "An error occurred"
+        text = "An error occurred. Please restart the engine"
         send_message(update, context, text)
         stop_engine(update, context)
         text = time.strftime("%Y-%m-%d %H:%M:%S") + " Error in the execution of the engine: " + str(traceback.print_exc())
@@ -280,7 +268,8 @@ def execute_trading_engine(update, context) -> None:
 def execute_dca(crypto, base, buy_amount, frequency, update, context):
     client_id = update.effective_chat.id
     settings = get_account(client_id)
-    while settings[DATA_DCA_RUNNING]:
+    global RUNNING_ENGINES
+    while RUNNING_ENGINES and RUNNING_ENGINES[client_id]:
         text = transfer_to_master_account(client_id, settings, crypto)
         send_message(update, context, text)
         text = transfer_to_master_account(client_id, settings, base)
@@ -288,17 +277,14 @@ def execute_dca(crypto, base, buy_amount, frequency, update, context):
         wait_from_last_trade(client_id, settings, crypto, base, frequency, update, context)
         message = transfer_to_sub_account(client_id, settings, buy_amount, base)
         if NEGATIVE_BALANCE in str(message):
-            text = "You have less than " + str(buy_amount) + " " + base + " available to buy " + crypto + ". Trying again in " + str(int(frequency/4)) + " seconds"
+            text = "You have less than " + str(buy_amount) + " " + base + " available to buy " + crypto + ". Trying again in " + str(int(frequency)) + " seconds"
             send_message(update, context, text)
-            time.sleep(int(frequency/4))
+            time.sleep(int(frequency))
         else:
             text = "Buying " + str(buy_amount) + " " + base + " of " + crypto
             send_message(update, context, text)
             create_buy_order(client_id, settings, crypto, base, buy_amount)
-    settings = get_account(client_id)
-
-def start_active_dcas() -> None:
-    return
+        settings = get_account(client_id)
 
 credentials = get_telegram_settings()
 tokenData = credentials[BOT_TOKEN_KEY]
@@ -314,7 +300,7 @@ setup_handler = ConversationHandler(
             SUB_API_SECRET: [MessageHandler(Filters.text, set_sub_api_secret)],
             SUB_API_LABEL: [MessageHandler(Filters.text, set_sub_api_label)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[]
     )
 my_dca_handler = CommandHandler('mydca', my_dca)
 add_dca_handler = CommandHandler('adddca', add_dca)
@@ -332,6 +318,5 @@ dispatcher.add_handler(start_engine_handler)
 dispatcher.add_handler(stop_engine_handler)
 dispatcher.add_handler(status_handler)
 dispatcher.add_handler(unknown_handler)
-start_active_dcas()
 updater.start_polling()
 updater.idle()

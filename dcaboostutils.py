@@ -14,7 +14,6 @@ DATA_MAIN_API_SECRET = "MainAPISecret"
 DATA_SUB_API_KEY = "SubAccountAPIKey"
 DATA_SUB_API_SECRET = "SubAccountAPISecret"
 DATA_SUB_API_LABEL = "SubAccountAPILabel"
-DATA_DCA_RUNNING = "DCARunning"
 DATA_DCA_CONFIG = "DCA"
 
 MAX_MESSAGE_LENGTH = 4096
@@ -90,7 +89,6 @@ def save_account(client_id, main_api_key, main_api_secret, sub_api_key, sub_api_
         DATA_SUB_API_KEY: sub_api_key,
         DATA_SUB_API_SECRET: sub_api_secret,
         DATA_SUB_API_LABEL : sub_api_label,
-        DATA_DCA_RUNNING : False,
         DATA_DCA_CONFIG: dca_config
     }
     return save_account(client_id, user_data)
