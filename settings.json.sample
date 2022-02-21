@@ -1,32 +1,4 @@
 {
-    "APIKey": "your crypto.com exchange subaccount api key",
-    "APISecret": "your crypto.com exchange subaccount api secret",
-    "APILabel": "your crypto.com subaccount api label",
-
-    "MainAPIKey": "your crypto.com exchange main account api key",
-    "MainAPISecret": "your crypto.com exchange main account api secret",
-
     "TelegramBotToken": "your telegram bot token",
-    "Users": ["your telegram username", "another telegram username"],
-
-    "DCA": [
-        {
-            "BASE_CURRENCY": "USDC",
-            "CRYPTO_CURRENCY": "CRO",
-            "BUY_AMOUNT_IN_BASE_CURRENCY": 1,
-            "FREQUENCY_IN_HOUR": 1
-        },
-        {
-            "BASE_CURRENCY": "USDC",
-            "CRYPTO_CURRENCY": "BTC",
-            "BUY_AMOUNT_IN_BASE_CURRENCY": 1,
-            "FREQUENCY_IN_HOUR": 24
-        },
-        {
-            "BASE_CURRENCY": "USDC",
-            "CRYPTO_CURRENCY": "ETH",
-            "BUY_AMOUNT_IN_BASE_CURRENCY": 1,
-            "FREQUENCY_IN_HOUR": 24
-        }
-    ]
+    "ErrorID": your_telegram_id
 }

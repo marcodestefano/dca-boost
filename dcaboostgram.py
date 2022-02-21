@@ -1,10 +1,12 @@
 import threading
-from telegram import Update
+from telegram import MAX_MESSAGE_LENGTH, Update
+import telegram
 from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters, CallbackContext
 from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
 from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_time_from_last_trade, create_buy_order
 
 BOT_TOKEN_KEY = 'TelegramBotToken'
+ERROR_HANDLER_ID = "ErrorID"
 NEGATIVE_BALANCE = "NEGATIVE_BALANCE"
 
 HOURLY_FREQUENCE = "HOURLY"
@@ -176,10 +178,18 @@ def unknown(update: Update, context: CallbackContext) -> None:
     text = "Sorry, I didn't understand that command"
     send_message(update, context, text)
 
-def error_handler(update: Update, context: CallbackContext) -> None:
-    text = "An error occurred, DCA engine has been stopped. Please restart it manually with /startengine"
-    send_message(update, context, text)
-    stop_engine(update, context)
+def error_handler(update: object, context: CallbackContext) -> None:
+    text = "An error occurred, DCA engine has been stopped. Please restart it manually with /startengine\n" \
+        "Error details: " + context.error + "\n"
+    if isinstance(update, Update):
+        text = text + str(update.to_dict()) 
+        send_message(update, context, text[:MAX_MESSAGE_LENGTH])
+        stop_engine(update, context)
+    else:
+        text = text + str(update)
+        telegram_settings = get_telegram_settings()
+        chat_id = telegram_settings[ERROR_HANDLER_ID]
+        context.bot.send_message(chat_id=chat_id, text=text[:MAX_MESSAGE_LENGTH])
 
 def dca_to_text(dca: dict) -> str:
     text = "Buy " + str(dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]) + " " + dca[BASE_CURRENCY_KEY] + " of " + dca[CRYPTO_CURRENCY_KEY] + " every "
@@ -211,9 +221,9 @@ def start_engine(update: Update, context: CallbackContext) -> None:
         global RUNNING_ENGINES
         if not RUNNING_ENGINES or not RUNNING_ENGINES[client_id] or RUNNING_ENGINES[client_id].isSet():
             RUNNING_ENGINES[client_id] = threading.Event()
-            tradingEngineThread = threading.Thread(target = execute_trading_engine, args = [update, context])
-            tradingEngineThread.start()
+            execute_trading_engine(update, context)
             text = "Trading engine correctly started"
+            time.sleep(3)
         else:
             text =  "Trading engine is already running"
     else:
@@ -268,9 +278,11 @@ def execute_trading_engine(update: Update, context: CallbackContext) -> None:
 def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, update: Update, context: CallbackContext):
     client_id = update.effective_chat.id
     settings = get_account(client_id)
-    waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, frequency, update, context)
+    time_offset = time.time()
+    waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, frequency, time_offset, update, context)
     global RUNNING_ENGINES
     while not RUNNING_ENGINES[client_id].wait(timeout = waiting_time):
+        time_offset = time.time()
         message = transfer_to_sub_account(client_id, settings, buy_amount, base)
         if NEGATIVE_BALANCE in str(message):
             text = "You have less than " + str(buy_amount) + " " + base + " available to buy " + crypto + ". Trying again in " + str(int(frequency)) + " seconds"
@@ -285,7 +297,7 @@ def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, updat
             text = transfer_to_master_account(client_id, settings, base)
             send_message(update, context, text)
         settings = get_account(client_id)
-        waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, frequency, update, context)
+        waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, frequency, time_offset, update, context)
     text = "Stopping DCA on " + crypto + "/" + base
     send_message(update, context, text)
 
