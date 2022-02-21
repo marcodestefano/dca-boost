@@ -223,12 +223,14 @@ def start_engine(update: Update, context: CallbackContext) -> None:
             RUNNING_ENGINES[client_id] = threading.Event()
             execute_trading_engine(update, context)
             text = "Trading engine correctly started"
-            time.sleep(3)
+            send_message(update, context, text)
         else:
             text =  "Trading engine is already running"
+            send_message(update, context, text)
     else:
         text = "You don't have an account yet. Please send /setup to create it"
-    send_message(update, context, text)
+        send_message(update, context, text)
+    
 
 def stop_engine(update: Update, context: CallbackContext) -> None:
     text = ""
