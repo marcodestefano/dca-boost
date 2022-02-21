@@ -139,8 +139,7 @@ def wait_time_from_last_trade(client_id, settings, crypto, base, frequency, time
         time_until_next_trade = int((most_recent_trade + frequency*1000 - int(time.time()*1000))/1000)
     elif trades is not None:
         time_until_next_trade = 1
-    seconds_to_remove = int(time.time()- time_offset)
-    time_until_next_trade = time_until_next_trade - seconds_to_remove
+    time_until_next_trade = time_until_next_trade - int(time_offset)
     text = "Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed"
     if time_until_next_trade == 1:
         text = "Buying " + crypto + " immediately"
