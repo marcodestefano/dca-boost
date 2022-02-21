@@ -279,7 +279,7 @@ def execute_trading_engine(update: Update, context: CallbackContext) -> None:
 def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, update: Update, context: CallbackContext):
     client_id = update.effective_chat.id
     settings = get_account(client_id)
-    waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, frequency, time_offset, update, context)
+    waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, frequency, 0, update, context)
     global RUNNING_ENGINES
     while not RUNNING_ENGINES[client_id].wait(timeout = waiting_time):
         time_offset = time.time()
