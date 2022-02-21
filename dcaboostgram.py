@@ -221,9 +221,9 @@ def start_engine(update: Update, context: CallbackContext) -> None:
         global RUNNING_ENGINES
         if not RUNNING_ENGINES or not RUNNING_ENGINES[client_id] or RUNNING_ENGINES[client_id].isSet():
             RUNNING_ENGINES[client_id] = threading.Event()
-            execute_trading_engine(update, context)
             text = "Trading engine correctly started"
             send_message(update, context, text)
+            execute_trading_engine(update, context)
         else:
             text =  "Trading engine is already running"
             send_message(update, context, text)
