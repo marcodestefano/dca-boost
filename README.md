@@ -1,6 +1,7 @@
 # dca-boost
 
 A python tool to set a [Dollar Cost Averaging](https://en.wikipedia.org/wiki/Dollar_cost_averaging) strategy through [Crypto.com Exchange](crypto.com/exchange)
+Please note that dca-boost bot is not developed and not affiliated to Crypto.com or any of its subsidiaries
 
 ## How to use dca-boost:
 
