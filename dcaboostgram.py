@@ -2,7 +2,7 @@ import threading
 from telegram import MAX_MESSAGE_LENGTH, Update
 from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters, CallbackContext
 from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
-from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_time_from_last_trade, create_buy_order
+from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_time_from_last_trade, get_time_until_next_trade, create_buy_order
 
 BOT_TOKEN_KEY = 'TelegramBotToken'
 ERROR_HANDLER_ID = "ErrorID"
@@ -132,6 +132,7 @@ def my_dca(update: Update, context: CallbackContext) -> None:
 
 def add_dca(update: Update, context: CallbackContext) -> None:
     new_dca = {}
+    dca_added = False
     dca_value = context.args
     text = ""
     chat_id = update.effective_chat.id
@@ -150,7 +151,7 @@ def add_dca(update: Update, context: CallbackContext) -> None:
                             current_dca = account[DATA_DCA_CONFIG]
                             for existing_dca in current_dca:
                                 if crypto == existing_dca[CRYPTO_CURRENCY_KEY] and base == existing_dca[BASE_CURRENCY_KEY]:
-                                    text = "You have already set up a DCA strategy with these currencies. Please remove the existing one first with /deletedca if you want to change the values"
+                                    text = "You have already set up a DCA strategy with these currencies. Please remove the existing one first with /removedca if you want to change the values"
                             if text == "":
                                 new_dca[FREQUENCY_IN_HOUR_KEY] = calculate_frequency_in_hours(frequency)
                                 new_dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY] = amount
@@ -158,7 +159,8 @@ def add_dca(update: Update, context: CallbackContext) -> None:
                                 new_dca[BASE_CURRENCY_KEY] = base
                                 current_dca.append(new_dca)
                                 save_account(chat_id, account)
-                                text = "Great, your new DCA strategy has been added"
+                                dca_added = True
+                                text = "Great, your new DCA strategy has been added. I am going to restart your full DCA strategy to take into account the one just added"
                         else:
                             text = "The currency pair " + crypto + "/" + base + " is not yet supported"
                     else:
@@ -168,10 +170,47 @@ def add_dca(update: Update, context: CallbackContext) -> None:
             else:
                 text = "The amount has to be a number without decimals"
         else:
-            text = "You have to write exactly four values, separated by space"
+            text = "You have to write exactly four values, separated by space: e.g. /adddca USDC BTC 10 BI-WEEKLY, if you want to buy 10 USDC of BTC every two weeks"
     else:
         text = "You don't have an account setup yet. Please /setup your account first"
     send_message(update, context, text)
+    if dca_added:
+        stop_engine(update, context)
+        time.sleep(1)
+        start_engine(update, context)
+
+def remove_dca(update: Update, context: CallbackContext) -> None:
+    new_dca = []
+    dca_removed = False
+    dca_value = context.args
+    text = ""
+    chat_id = update.effective_chat.id
+    account = get_account(chat_id)
+    if account:
+        if dca_value and len(dca_value) == 2:
+            base = str(dca_value[0]).upper()
+            crypto = str(dca_value[1]).upper()
+            current_dca = account[DATA_DCA_CONFIG]
+            for existing_dca in current_dca:
+                if crypto == existing_dca[CRYPTO_CURRENCY_KEY] and base == existing_dca[BASE_CURRENCY_KEY]:
+                    dca_removed = True
+                else:
+                    new_dca.append(existing_dca)
+            if not dca_removed:
+                text = "There is no DCA strategy on " + crypto + "/" + base + ". Please check the existing DCA strategy with /mydca" 
+            else:
+                account[DATA_DCA_CONFIG] = new_dca
+                save_account(chat_id, account)
+                text = "Ok, your DCA strategy on " + crypto + "/" + base + " has been removed. I am going to restart your full DCA strategy to reflect this removal"
+        else:
+            text = "You have to write exactly two values, separated by space: e.g. /removedca USDC BTC, if you want to remove your DCA strategy of buying BTC with USDC"
+    else:
+        text = "You don't have an account setup yet. Please /setup your account first"
+    send_message(update, context, text)
+    if dca_removed:
+        stop_engine(update, context)
+        time.sleep(1)
+        start_engine(update, context)
 
 def unknown(update: Update, context: CallbackContext) -> None:
     text = "Sorry, I didn't understand that command"
@@ -179,7 +218,7 @@ def unknown(update: Update, context: CallbackContext) -> None:
 
 def error_handler(update: object, context: CallbackContext) -> None:
     text = "An error occurred, DCA engine has been stopped. Please restart it manually with /startengine\n" \
-        "Error details: " + context.error + "\n"
+        "Error details: " + str(context.error) + "\n"
     if isinstance(update, Update):
         text = text + str(update.to_dict()) 
         send_message(update, context, text[:MAX_MESSAGE_LENGTH])
@@ -254,7 +293,17 @@ def status(update: Update, context: CallbackContext) -> None:
     if account:
         global RUNNING_ENGINES
         if RUNNING_ENGINES and RUNNING_ENGINES[client_id] and not RUNNING_ENGINES[client_id].isSet():
-            text = "Trading engine is running"
+            text = "Trading engine is running\n\n"
+            dca_settings = account[DATA_DCA_CONFIG]
+            if dca_settings:
+                for dca in dca_settings:
+                    crypto = dca[CRYPTO_CURRENCY_KEY]
+                    base = dca[BASE_CURRENCY_KEY]
+                    frequency = int(dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR)
+                    time_until_next_trade = get_time_until_next_trade(client_id, account, crypto, base, frequency, 0)
+                    text = text + "Next purchase of " + crypto + " with " + base + " in " + str(time_until_next_trade) + " seconds\n"
+            else:
+                text = text + "You don't have any DCA strategy yet. You can add it with /adddca"
         else:
             text = "Trading engine is not running"
     else:
@@ -320,6 +369,7 @@ setup_handler = ConversationHandler(
     )
 my_dca_handler = CommandHandler('mydca', my_dca)
 add_dca_handler = CommandHandler('adddca', add_dca)
+remove_dca_handler = CommandHandler('removedca', remove_dca)
 help_handler = CommandHandler('help', help)
 start_engine_handler = CommandHandler('startengine', start_engine)
 stop_engine_handler = CommandHandler('stopengine', stop_engine)
@@ -329,6 +379,7 @@ dispatcher.add_handler(start_handler)
 dispatcher.add_handler(setup_handler)
 dispatcher.add_handler(my_dca_handler)
 dispatcher.add_handler(add_dca_handler)
+dispatcher.add_handler(remove_dca_handler)
 dispatcher.add_handler(help_handler)
 dispatcher.add_handler(start_engine_handler)
 dispatcher.add_handler(stop_engine_handler)
