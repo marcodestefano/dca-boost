@@ -2,14 +2,14 @@
 
 A python tool to set a [Dollar Cost Averaging](https://en.wikipedia.org/wiki/Dollar_cost_averaging) strategy through [Crypto.com Exchange](crypto.com/exchange)
 
-Please note that dca-boost bot is not developed and not affiliated to Crypto.com or any of its subsidiaries. The dca-boost bot service is not an investment advice, use it at your own risk.
+Please note that dca-boost bot is not affiliated to Crypto.com or any of its subsidiaries. The dca-boost bot service is not an investment advice, use it at your own risk.
 
 ## How to use dca-boost:
 
 ### Before starting
 
 #### Install dependencies
-- python-telegram-bot (pip install python-telegram-bot)
+- pip install requirements.txt
 
 dca-boost requires Python > 3.0. It has been tested with Python 3.7
 
