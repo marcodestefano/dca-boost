@@ -1,7 +1,7 @@
 import threading
-from telegram import MAX_MESSAGE_LENGTH, Update
+from telegram import MAX_MESSAGE_LENGTH, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters, CallbackContext
-from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
+from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, delete_account_data, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
 from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_time_from_last_trade, get_time_until_next_trade, create_buy_order
 
 BOT_TOKEN_KEY = 'TelegramBotToken'
@@ -15,6 +15,7 @@ BI_WEEKLY_FREQUENCE = "BI-WEEKLY"
 FREQUENCIES = [HOURLY_FREQUENCE, DAILY_FREQUENCE, WEEKLY_FREQUENCE, BI_WEEKLY_FREQUENCE]
 
 MAIN_API_KEY, MAIN_API_SECRET, SUB_API_KEY, SUB_API_SECRET, SUB_API_LABEL = range(5)
+CONFIRM_DELETE = range(1)
 
 RUNNING_ENGINES = {}
 
@@ -49,7 +50,7 @@ def setup(update: Update, context: CallbackContext) -> int:
     if account:
         text = "You already have an account setup. Please /delete your account if you want to setup it again"
     else:
-        text = """Great, let's start the setup of your account. To cancel the operation, just send /cancel anytime.\n 
+        text = """Great, let's start the setup of your account\n 
         Please write your main account Api Key"""
         conversation_next_step = MAIN_API_KEY
     send_message(update, context, text)
@@ -216,6 +217,34 @@ def unknown(update: Update, context: CallbackContext) -> None:
     text = "Sorry, I didn't understand that command"
     send_message(update, context, text)
 
+def delete_account(update: Update, context: CallbackContext) -> int:
+    result = ConversationHandler.END
+    text = "You don't have an account yet. Please send /setup to create it"
+    chat_id = update.effective_chat.id
+    account = get_account(chat_id)
+    if account:
+        reply_keyboard = [['Y','N']]
+        text = "The operation will stop the engine and erase all your data; " \
+            "I won't be able to recover it.\nAre you sure you want to delete your account? (Y/N)"
+        update.message.reply_text(text = text, reply_markup= ReplyKeyboardMarkup(
+                reply_keyboard, one_time_keyboard=True, input_field_placeholder='Confirm account deletion? (Y/N)')
+            )
+        result = CONFIRM_DELETE
+    else:
+        send_message(update, context, text)
+    return result
+
+def confirm_account_delete(update: Update, context: CallbackContext) -> int:
+    user_confirmation = update.message.text.upper()
+    chat_id = update.effective_chat.id
+    text = "Your account has not been deleted"
+    if user_confirmation and user_confirmation == 'Y':
+        text = "All right, your account has been correctly deleted. No further actions are going to be taken on your funds. Bye!"
+        stop_engine(update, context)
+        delete_account_data(chat_id)
+    update.message.reply_text(text = text, reply_markup= ReplyKeyboardRemove())
+    return ConversationHandler.END
+
 def error_handler(update: object, context: CallbackContext) -> None:
     text = "An error occurred, DCA engine has been stopped. Please restart it manually with /startengine\n" \
         "Error details: " + str(context.error) + "\n"
@@ -357,16 +386,23 @@ updater = Updater(token=tokenData)
 dispatcher = updater.dispatcher
 start_handler = CommandHandler('start', start)
 setup_handler = ConversationHandler(
-        entry_points=[CommandHandler('setup', setup)],
-        states={
-            MAIN_API_KEY: [MessageHandler(Filters.text, set_main_api_key)],
-            MAIN_API_SECRET: [MessageHandler(Filters.text, set_main_api_secret)],
-            SUB_API_KEY: [MessageHandler(Filters.text, set_sub_api_key)],
-            SUB_API_SECRET: [MessageHandler(Filters.text, set_sub_api_secret)],
-            SUB_API_LABEL: [MessageHandler(Filters.text, set_sub_api_label)]
-        },
-        fallbacks=[]
-    )
+    entry_points=[CommandHandler('setup', setup)],
+    states={
+        MAIN_API_KEY: [MessageHandler(Filters.text, set_main_api_key)],
+        MAIN_API_SECRET: [MessageHandler(Filters.text, set_main_api_secret)],
+        SUB_API_KEY: [MessageHandler(Filters.text, set_sub_api_key)],
+        SUB_API_SECRET: [MessageHandler(Filters.text, set_sub_api_secret)],
+        SUB_API_LABEL: [MessageHandler(Filters.text, set_sub_api_label)]
+    },
+    fallbacks=[]
+)
+delete_handler = ConversationHandler(
+    entry_points = [CommandHandler('deleteaccount', delete_account)],
+    states = {
+        CONFIRM_DELETE: [MessageHandler(Filters.regex('^(Y|N|y|n)$'), confirm_account_delete)]
+    },
+    fallbacks=[]
+)
 my_dca_handler = CommandHandler('mydca', my_dca)
 add_dca_handler = CommandHandler('adddca', add_dca)
 remove_dca_handler = CommandHandler('removedca', remove_dca)
@@ -381,6 +417,7 @@ dispatcher.add_handler(my_dca_handler)
 dispatcher.add_handler(add_dca_handler)
 dispatcher.add_handler(remove_dca_handler)
 dispatcher.add_handler(help_handler)
+dispatcher.add_handler(delete_handler)
 dispatcher.add_handler(start_engine_handler)
 dispatcher.add_handler(stop_engine_handler)
 dispatcher.add_handler(status_handler)

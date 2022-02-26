@@ -1,4 +1,5 @@
 import json
+import os
 import hmac
 import hashlib
 import time
@@ -24,6 +25,11 @@ def create_pair(crypto, base) -> str:
 
 def get_telegram_settings():
     return get_json_data(SETTINGS_FILE)
+
+def delete_account_data(client_id) -> None:
+    filename = get_filename(client_id)
+    if os.path.isfile(filename):
+        os.remove(filename)
 
 def get_filename(client_id) -> str:
     return str(client_id) + "_" + SETTINGS_FILE
