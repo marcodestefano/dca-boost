@@ -148,4 +148,6 @@ def get_time_until_next_trade(client_id, settings, crypto, base, frequency, time
     elif trades is not None:
         time_until_next_trade = 1
     time_until_next_trade = time_until_next_trade - int(time_offset)
+    if time_until_next_trade < 0:
+        time_until_next_trade = frequency
     return time_until_next_trade
