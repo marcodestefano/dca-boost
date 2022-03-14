@@ -2,7 +2,7 @@ import threading
 from telegram import MAX_MESSAGE_LENGTH, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters, CallbackContext
 from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, delete_account_data, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
-from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_time_from_last_trade, get_time_until_next_trade, create_buy_order
+from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, REVERSED_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_time_from_last_trade, get_time_until_next_trade, create_buy_order
 
 BOT_TOKEN_KEY = 'TelegramBotToken'
 ERROR_HANDLER_ID = "ErrorID"
@@ -158,6 +158,7 @@ def add_dca(update: Update, context: CallbackContext) -> None:
                                 new_dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY] = amount
                                 new_dca[CRYPTO_CURRENCY_KEY] = crypto
                                 new_dca[BASE_CURRENCY_KEY] = base
+                                new_dca[REVERSED_KEY] = False
                                 current_dca.append(new_dca)
                                 save_account(chat_id, account)
                                 dca_added = True
@@ -259,7 +260,10 @@ def error_handler(update: object, context: CallbackContext) -> None:
         context.bot.send_message(chat_id=chat_id, text=text[:MAX_MESSAGE_LENGTH])
 
 def dca_to_text(dca: dict) -> str:
-    text = "Buy " + str(dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]) + " " + dca[BASE_CURRENCY_KEY] + " of " + dca[CRYPTO_CURRENCY_KEY] + " every "
+    is_reversed = dca[REVERSED_KEY]
+    crypto = dca[CRYPTO_CURRENCY_KEY] if not is_reversed else dca[BASE_CURRENCY_KEY]
+    base = dca[BASE_CURRENCY_KEY] if not is_reversed else dca[CRYPTO_CURRENCY_KEY]
+    text = "Buy " + str(dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]) + " " + base + " of " + crypto + " every "
     if dca[FREQUENCY_IN_HOUR_KEY] == 1:
         text = text + "hour"
     elif dca[FREQUENCY_IN_HOUR_KEY] == 24:
@@ -344,20 +348,21 @@ def execute_trading_engine(update: Update, context: CallbackContext) -> None:
     dca_settings = settings[DATA_DCA_CONFIG]
     if dca_settings:
         for dca in dca_settings:
-            crypto = dca[CRYPTO_CURRENCY_KEY]
-            base = dca[BASE_CURRENCY_KEY]
+            is_reversed = dca[REVERSED_KEY]
+            crypto = dca[CRYPTO_CURRENCY_KEY] if not is_reversed else dca[BASE_CURRENCY_KEY]
+            base = dca[BASE_CURRENCY_KEY] if not is_reversed else dca[CRYPTO_CURRENCY_KEY]
             buy_amount = dca[BUY_AMOUNT_IN_BASE_CURRENCY_KEY]
             frequency = int(dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR)
             text = "Starting DCA on " + crypto + ", buying " + str(buy_amount) + " " + base + " every " + str(frequency) + " seconds"
             send_message(update, context, text)
-            dca_thread = threading.Thread(target = execute_dca, args = (crypto, base, buy_amount, frequency, update, context), daemon = True)
+            dca_thread = threading.Thread(target = execute_dca, args = (crypto, base, buy_amount, frequency, is_reversed, update, context), daemon = True)
             time.sleep(1)
             dca_thread.start()
 
-def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, update: Update, context: CallbackContext):
+def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, is_reversed: bool, update: Update, context: CallbackContext):
     client_id = update.effective_chat.id
     settings = get_account(client_id)
-    waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, frequency, 0, update, context)
+    waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, is_reversed, frequency, 0, update, context)
     global RUNNING_ENGINES
     while not RUNNING_ENGINES[client_id].wait(timeout = waiting_time):
         time_offset = time.time()
@@ -369,14 +374,14 @@ def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, updat
         else:
             text = "Buying " + str(buy_amount) + " " + base + " of " + crypto
             send_message(update, context, text)
-            create_buy_order(client_id, settings, crypto, base, buy_amount)
+            create_buy_order(client_id, settings, crypto, base, buy_amount, is_reversed)
             time_offset = time.time()-time_offset
             text = transfer_to_master_account(client_id, settings, crypto)
             send_message(update, context, text)
             text = transfer_to_master_account(client_id, settings, base)
             send_message(update, context, text)
         settings = get_account(client_id)
-        waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, frequency, time_offset, update, context)
+        waiting_time = wait_time_from_last_trade(client_id, settings, crypto, base, is_reversed, frequency, time_offset, update, context)
     text = "Stopping DCA on " + crypto + "/" + base
     send_message(update, context, text)
 

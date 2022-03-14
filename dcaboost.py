@@ -9,6 +9,7 @@ CRYPTO_CURRENCY_KEY = "CRYPTO_CURRENCY"
 BASE_CURRENCY_KEY = "BASE_CURRENCY"
 BUY_AMOUNT_IN_BASE_CURRENCY_KEY = "BUY_AMOUNT_IN_BASE_CURRENCY"
 FREQUENCY_IN_HOUR_KEY = "FREQUENCY_IN_HOUR"
+REVERSED_KEY = "REVERSED"
 SECONDS_IN_ONE_HOUR = 3600
 
 def get_account_summary(client_id, apikey, apisecret, currency = None):
@@ -52,14 +53,17 @@ def transfer_amount(client_id, apikey, apisecret, from_account, to_account, amou
             json_result = json.loads(query_result.text)
     return json_result
 
-def create_buy_order(client_id, settings, crypto, base, buy_amount):
+def create_buy_order(client_id, settings, crypto, base, buy_amount, is_reversed = False):
     json_result = None
+    instrument_name = create_pair(base, crypto) if is_reversed else create_pair(crypto,base)
+    order_side = "SELL" if is_reversed else "BUY"
+    order_key = "quantity" if is_reversed else "notional"
     method = "private/create-order"
     params = {
-        "instrument_name": create_pair(crypto,base),
-        "side": "BUY",
+        "instrument_name": instrument_name,
+        "side": order_side,
         "type": "MARKET",
-        "notional": buy_amount
+        order_key: buy_amount
         }
     query_result = query(client_id, settings[DATA_SUB_API_KEY], settings[DATA_SUB_API_SECRET], method, params)
     if query_result:
@@ -83,10 +87,11 @@ def get_order_id(order):
         order_id = order["result"]["order_id"]
     return order_id
 
-def get_trades(client_id, apikey, apisecret, crypto, base, start_time, end_time = None):
+def get_trades(client_id, apikey, apisecret, crypto, base, is_reversed, start_time, end_time = None):
     method = "private/get-trades"
+    instrument_name = create_pair(base, crypto) if is_reversed else create_pair(crypto,base)
     params = {
-        "instrument_name": create_pair(crypto, base),
+        "instrument_name": instrument_name,
         "start_ts": start_time
     }
     #If end_time is not provided, let's set it as current time
@@ -127,18 +132,18 @@ def transfer_to_sub_account(client_id, settings, amount, currency):
     text = transfer_amount(client_id, settings[DATA_MAIN_API_KEY], settings[DATA_MAIN_API_SECRET], MASTER_ACCOUNT, SUB_ACCOUNT, amount, currency)
     return text
 
-def wait_time_from_last_trade(client_id, settings, crypto, base, frequency, time_offset, update, context):
-    time_until_next_trade = get_time_until_next_trade(client_id, settings, crypto, base, frequency, time_offset)
+def wait_time_from_last_trade(client_id, settings, crypto, base, is_reversed, frequency, time_offset, update, context):
+    time_until_next_trade = get_time_until_next_trade(client_id, settings, crypto, base, is_reversed, frequency, time_offset)
     text = "Waiting " + str(time_until_next_trade) + " seconds before next buy order of " + crypto + " is placed"
     if time_until_next_trade == 1:
         text = "Buying " + crypto + " immediately"
     send_message(update, context, text)
     return time_until_next_trade
 
-def get_time_until_next_trade(client_id, settings, crypto, base, frequency, time_offset):
+def get_time_until_next_trade(client_id, settings, crypto, base, is_reversed, frequency, time_offset):
     expected_last_trade = (int(time.time()) - frequency) * 1000
     time_until_next_trade = frequency
-    trades = get_trades(client_id, settings[DATA_SUB_API_KEY], settings[DATA_SUB_API_SECRET], crypto, base, expected_last_trade)
+    trades = get_trades(client_id, settings[DATA_SUB_API_KEY], settings[DATA_SUB_API_SECRET], crypto, base, is_reversed, expected_last_trade)
     if trades:
         most_recent_trade = 0
         for trade in trades:
