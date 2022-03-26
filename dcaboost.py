@@ -156,3 +156,9 @@ def get_time_until_next_trade(client_id, settings, crypto, base, is_reversed, fr
     if time_until_next_trade < 0:
         time_until_next_trade = frequency
     return time_until_next_trade
+
+def get_valid_amount(client_id, apikey, apisecret, currency, requested_amount):
+    available_quantity = get_available_quantity(client_id, apikey, apisecret, currency)
+    available_quantity = int(available_quantity)
+    valid_amount = min(requested_amount, available_quantity)
+    return valid_amount

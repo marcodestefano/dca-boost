@@ -2,7 +2,7 @@ import threading
 from telegram import MAX_MESSAGE_LENGTH, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, ConversationHandler, MessageHandler, Filters, CallbackContext
 from dcaboostutils import DATA_MAIN_API_KEY, DATA_MAIN_API_SECRET, DATA_SUB_API_KEY, DATA_SUB_API_SECRET, DATA_SUB_API_LABEL, DATA_DCA_CONFIG, time, save_account, delete_account_data, get_telegram_settings, get_account, send_message, test_api, get_instrument, mask, amount_format
-from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, REVERSED_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_time_from_last_trade, get_time_until_next_trade, create_buy_order
+from dcaboost import CRYPTO_CURRENCY_KEY, BASE_CURRENCY_KEY, BUY_AMOUNT_IN_BASE_CURRENCY_KEY, FREQUENCY_IN_HOUR_KEY, REVERSED_KEY, SECONDS_IN_ONE_HOUR, transfer_to_master_account, transfer_to_sub_account, wait_time_from_last_trade, get_time_until_next_trade, create_buy_order, get_valid_amount
 
 BOT_TOKEN_KEY = 'TelegramBotToken'
 ERROR_HANDLER_ID = "ErrorID"
@@ -366,12 +366,13 @@ def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, is_re
     global RUNNING_ENGINES
     while not RUNNING_ENGINES[client_id].wait(timeout = waiting_time):
         time_offset = time.time()
-        message = transfer_to_sub_account(client_id, settings, buy_amount, base)
-        if NEGATIVE_BALANCE in str(message):
-            text = "You have less than " + str(buy_amount) + " " + base + " available to buy " + crypto + ". Trying again in " + str(int(frequency)) + " seconds"
+        buy_amount = get_valid_amount(client_id, settings[DATA_MAIN_API_KEY], settings[DATA_MAIN_API_SECRET], base, buy_amount)
+        if buy_amount == 0:
+            text = "You have no " + base + " available to buy " + crypto + ". Trying again in " + str(int(frequency)) + " seconds"
             send_message(update, context, text)
             waiting_time = int(frequency)
         else:
+            transfer_to_sub_account(client_id, settings, buy_amount, base)
             text = "Buying " + str(buy_amount) + " " + base + " of " + crypto
             send_message(update, context, text)
             create_buy_order(client_id, settings, crypto, base, buy_amount, is_reversed)
