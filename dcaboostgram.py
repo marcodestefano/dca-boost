@@ -329,10 +329,11 @@ def status(update: Update, context: CallbackContext) -> None:
             dca_settings = account[DATA_DCA_CONFIG]
             if dca_settings:
                 for dca in dca_settings:
-                    crypto = dca[CRYPTO_CURRENCY_KEY]
-                    base = dca[BASE_CURRENCY_KEY]
+                    is_reversed = dca[REVERSED_KEY]
+                    crypto = dca[CRYPTO_CURRENCY_KEY] if not is_reversed else dca[BASE_CURRENCY_KEY]
+                    base = dca[BASE_CURRENCY_KEY] if not is_reversed else dca[CRYPTO_CURRENCY_KEY]
                     frequency = int(dca[FREQUENCY_IN_HOUR_KEY] * SECONDS_IN_ONE_HOUR)
-                    time_until_next_trade = get_time_until_next_trade(client_id, account, crypto, base, frequency, 0)
+                    time_until_next_trade = get_time_until_next_trade(client_id, account, crypto, base, is_reversed, frequency, 0)
                     text = text + "Next purchase of " + crypto + " with " + base + " in " + str(time_until_next_trade) + " seconds\n"
             else:
                 text = text + "You don't have any DCA strategy yet. You can add it with /adddca"
