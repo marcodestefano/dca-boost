@@ -366,16 +366,16 @@ def execute_dca(crypto: str, base: str, buy_amount: float, frequency: int, is_re
     global RUNNING_ENGINES
     while not RUNNING_ENGINES[client_id].wait(timeout = waiting_time):
         time_offset = time.time()
-        buy_amount = get_valid_amount(client_id, settings[DATA_MAIN_API_KEY], settings[DATA_MAIN_API_SECRET], base, buy_amount)
-        if buy_amount == 0:
+        valid_buy_amount = get_valid_amount(client_id, settings[DATA_MAIN_API_KEY], settings[DATA_MAIN_API_SECRET], base, buy_amount)
+        if valid_buy_amount == 0:
             text = "You have no " + base + " available to buy " + crypto + ". Trying again in " + str(int(frequency)) + " seconds"
             send_message(update, context, text)
             waiting_time = int(frequency)
         else:
-            transfer_to_sub_account(client_id, settings, buy_amount, base)
-            text = "Buying " + str(buy_amount) + " " + base + " of " + crypto
+            transfer_to_sub_account(client_id, settings, valid_buy_amount, base)
+            text = "Buying " + str(valid_buy_amount) + " " + base + " of " + crypto
             send_message(update, context, text)
-            create_buy_order(client_id, settings, crypto, base, buy_amount, is_reversed)
+            create_buy_order(client_id, settings, crypto, base, valid_buy_amount, is_reversed)
             time_offset = time.time()-time_offset
             text = transfer_to_master_account(client_id, settings, crypto)
             send_message(update, context, text)
